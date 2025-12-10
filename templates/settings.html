@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>설정 - 구름환경 판매데이터 분석</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar h1 { color: white; font-size: 20px; }
+        .navbar-right { display: flex; align-items: center; gap: 20px; }
+        .navbar-right span { color: white; }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-primary:hover { background: #45a049; }
+        .btn-secondary { background: rgba(255, 255, 255, 0.2); color: white; }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.3); }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 30px; }
+
+        .page-header { margin-bottom: 30px; }
+        .page-header h2 { font-size: 24px; color: #333; margin-bottom: 10px; }
+        .page-header p { color: #666; }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 30px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group input:disabled {
+            background: #f5f5f5;
+            color: #888;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-row:last-child { border-bottom: none; }
+        .info-label { font-weight: 500; color: #666; }
+        .info-value { color: #333; }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #333;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success { background: #27ae60; }
+        .toast.error { background: #e74c3c; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .btn-block {
+            width: 100%;
+            padding: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            .navbar { flex-direction: column; gap: 15px; }
+            .navbar-right { flex-wrap: wrap; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>☁️ 구름환경 판매데이터 분석</h1>
+        <div class="navbar-right">
+            <span>👤 {{ session.username }} 님</span>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">📈 대시보드</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-danger">로그아웃</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h2>⚙️ 설정</h2>
+            <p>관리자 계정 정보를 확인하고 비밀번호를 변경할 수 있습니다.</p>
+        </div>
+
+        <!-- 계정 정보 -->
+        <div class="card">
+            <h3 class="card-title">계정 정보</h3>
+
+            <div class="info-row">
+                <span class="info-label">사용자 ID</span>
+                <span class="info-value">{{ admin_info.username if admin_info else '-' }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">계정 생성일</span>
+                <span class="info-value">{{ admin_info.created_at if admin_info else '-' }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">마지막 수정일</span>
+                <span class="info-value">{{ admin_info.updated_at if admin_info else '-' }}</span>
+            </div>
+        </div>
+
+        <!-- 비밀번호 변경 -->
+        <div class="card">
+            <h3 class="card-title">🔒 비밀번호 변경</h3>
+
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label for="old_password">현재 비밀번호</label>
+                    <input type="password" id="old_password" name="old_password" required placeholder="현재 비밀번호를 입력하세요">
+                </div>
+
+                <div class="form-group">
+                    <label for="new_password">새 비밀번호</label>
+                    <input type="password" id="new_password" name="new_password" required placeholder="새 비밀번호를 입력하세요 (4자 이상)">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">새 비밀번호 확인</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required placeholder="새 비밀번호를 다시 입력하세요">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">비밀번호 변경</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const old_password = document.getElementById('old_password').value;
+            const new_password = document.getElementById('new_password').value;
+            const confirm_password = document.getElementById('confirm_password').value;
+
+            if (new_password !== confirm_password) {
+                showToast('새 비밀번호가 일치하지 않습니다.', 'error');
+                return;
+            }
+
+            if (new_password.length < 4) {
+                showToast('비밀번호는 4자 이상이어야 합니다.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        old_password: old_password,
+                        new_password: new_password,
+                        confirm_password: confirm_password
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    document.getElementById('passwordForm').reset();
+                } else {
+                    showToast(result.error, 'error');
+                }
+            } catch (error) {
+                showToast('비밀번호 변경 중 오류가 발생했습니다.', 'error');
+            }
+        });
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+    </script>
+</body>
+</html>

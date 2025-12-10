@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구름환경 판매데이터 분석</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar h1 {
+            color: white;
+            font-size: 20px;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .navbar-right span {
+            color: white;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary { background: #4CAF50; color: white; }
+        .btn-primary:hover { background: #45a049; }
+        .btn-secondary { background: rgba(255, 255, 255, 0.2); color: white; }
+        .btn-secondary:hover { background: rgba(255, 255, 255, 0.3); }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-info { background: #3498db; color: white; }
+        .btn-info:hover { background: #2980b9; }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 30px;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .card-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .card-value {
+            font-size: 26px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .card-sub {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .icon-blue { background: #e3f2fd; }
+        .icon-green { background: #e8f5e9; }
+        .icon-purple { background: #f3e5f5; }
+        .icon-orange { background: #fff3e0; }
+        .icon-red { background: #ffebee; }
+        .icon-teal { background: #e0f2f1; }
+
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: 15px;
+            padding: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab:hover:not(.active) {
+            background: #f5f5f5;
+        }
+
+        .chart-section {
+            display: none;
+        }
+
+        .chart-section.active {
+            display: block;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+            font-size: 13px;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .data-table td {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .table-wrapper {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .money { font-weight: 600; color: #27ae60; }
+        .qty { color: #3498db; }
+        .supplier { color: #8e44ad; font-weight: 500; }
+        .category { color: #e67e22; }
+
+        /* 드릴다운 테이블 스타일 */
+        .row-supplier { background: #f8f9fa; cursor: pointer; }
+        .row-supplier:hover { background: #e9ecef; }
+        .row-supplier td:first-child { font-weight: 600; color: #8e44ad; }
+        .row-category { background: #fff; cursor: pointer; display: none; }
+        .row-category:hover { background: #fafafa; }
+        .row-category td:first-child { padding-left: 30px; color: #e67e22; font-weight: 500; }
+        .row-product { background: #fff; display: none; }
+        .row-product td:first-child { padding-left: 60px; color: #555; }
+        .toggle-icon { margin-right: 8px; transition: transform 0.2s; display: inline-block; }
+        .expanded .toggle-icon { transform: rotate(90deg); }
+        .cat-count {
+            background: #e0e0e0;
+            color: #666;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        .product-rank {
+            background: #667eea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-right: 5px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: #333;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            display: none;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.success { background: #27ae60; }
+        .toast.error { background: #e74c3c; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #888;
+        }
+
+        .empty-state .icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .db-badge {
+            background: #27ae60;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            margin-left: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .tabs { flex-direction: column; }
+            .tab { text-align: center; }
+            .navbar { flex-direction: column; gap: 15px; }
+            .navbar-right { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>☁️ 구름환경 판매데이터 분석 <span class="db-badge">DB 연동</span></h1>
+        <div class="navbar-right">
+            <span>👤 {{ session.username }} 님</span>
+            <a href="{{ url_for('upload_page') }}" class="btn btn-info">📤 데이터 업로드</a>
+            <button class="btn btn-primary" onclick="saveReport()">📁 리포트 저장</button>
+            <a href="{{ url_for('settings_page') }}" class="btn btn-secondary">⚙️ 설정</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-danger">로그아웃</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 요약 카드 -->
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">총 매출액</span>
+                    <div class="card-icon icon-blue">💰</div>
+                </div>
+                <div class="card-value" id="total-sales">-</div>
+                <div class="card-sub">DB 저장 데이터 기준</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">총 판매량</span>
+                    <div class="card-icon icon-green">📦</div>
+                </div>
+                <div class="card-value" id="total-qty">-</div>
+                <div class="card-sub">전체 판매 수량</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">등록 업체수</span>
+                    <div class="card-icon icon-purple">🏭</div>
+                </div>
+                <div class="card-value" id="supplier-count">-</div>
+                <div class="card-sub">납품업체 기준</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">카테고리수</span>
+                    <div class="card-icon icon-orange">📁</div>
+                </div>
+                <div class="card-value" id="category-count">-</div>
+                <div class="card-sub">상품 분류 기준</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">등록 상품수</span>
+                    <div class="card-icon icon-teal">🏷️</div>
+                </div>
+                <div class="card-value" id="product-count">-</div>
+                <div class="card-sub">고유 상품 기준</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">총 데이터</span>
+                    <div class="card-icon icon-red">📊</div>
+                </div>
+                <div class="card-value" id="total-records">-</div>
+                <div class="card-sub">원본+월별 데이터</div>
+            </div>
+        </div>
+
+        <!-- 탭 네비게이션 -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('supplier')">🏭 업체별 매출</button>
+            <button class="tab" onclick="showTab('category')">📁 카테고리별</button>
+            <button class="tab" onclick="showTab('products')">🏆 베스트셀러</button>
+            <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
+            <button class="tab" onclick="showTab('store')">🏪 매장별</button>
+            <button class="tab" onclick="showTab('matrix')">📊 업체-카테고리</button>
+        </div>
+
+        <!-- 업체별 섹션 -->
+        <div id="supplier-section" class="chart-section active">
+            <div class="grid-2">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">업체별 매출 현황</h3>
+                        <button class="btn btn-primary" onclick="exportData('supplier')">📥 Excel 저장</button>
+                    </div>
+                    <canvas id="supplierChart" height="300"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">업체별 상세 데이터</h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="supplier-table">
+                            <thead>
+                                <tr>
+                                    <th>순위</th>
+                                    <th>업체명</th>
+                                    <th>매출액</th>
+                                    <th>판매량</th>
+                                    <th>상품수</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 카테고리별 섹션 -->
+        <div id="category-section" class="chart-section">
+            <div class="grid-2">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">카테고리별 매출 현황</h3>
+                        <button class="btn btn-primary" onclick="exportData('category')">📥 Excel 저장</button>
+                    </div>
+                    <canvas id="categoryChart" height="300"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">카테고리별 상세 데이터</h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="category-table">
+                            <thead>
+                                <tr>
+                                    <th>순위</th>
+                                    <th>카테고리</th>
+                                    <th>매출액</th>
+                                    <th>판매량</th>
+                                    <th>상품수</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 베스트셀러 섹션 -->
+        <div id="products-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">베스트셀러 상품 TOP 30</h3>
+                    <button class="btn btn-primary" onclick="exportData('products')">📥 Excel 저장</button>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="products-table">
+                        <thead>
+                            <tr>
+                                <th>순위</th>
+                                <th>상품코드</th>
+                                <th>상품명</th>
+                                <th>업체명</th>
+                                <th>카테고리</th>
+                                <th>매출액</th>
+                                <th>판매량</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 일별 현황 섹션 -->
+        <div id="daily-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">일별 매출 추이</h3>
+                    <button class="btn btn-primary" onclick="exportData('daily')">📥 Excel 저장</button>
+                </div>
+                <canvas id="dailyChart" height="150"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">일별 상세 데이터</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="daily-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>매출액</th>
+                                <th>판매량</th>
+                                <th>건수</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 매장별 섹션 -->
+        <div id="store-section" class="chart-section">
+            <div class="grid-2">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">매장별 매출 현황</h3>
+                        <button class="btn btn-primary" onclick="exportData('store')">📥 Excel 저장</button>
+                    </div>
+                    <canvas id="storeChart" height="300"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <h3 class="chart-title">매장별 상세 데이터</h3>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="store-table">
+                            <thead>
+                                <tr>
+                                    <th>순위</th>
+                                    <th>매장명</th>
+                                    <th>매출액</th>
+                                    <th>판매량</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 업체-카테고리-상품 드릴다운 섹션 -->
+        <div id="matrix-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">📊 업체 → 카테고리 → 상품 분석</h3>
+                    <button class="btn btn-primary" onclick="exportData('matrix')">📥 Excel 저장</button>
+                </div>
+                <p style="color:#666; margin-bottom:15px; font-size:13px;">
+                    💡 <strong>클릭하여 펼치기/접기:</strong> 업체 클릭 → 카테고리 보기 → 카테고리 클릭 → 상품 보기 (매출액 내림차순)
+                </p>
+                <div class="table-wrapper" style="max-height:700px;">
+                    <table class="data-table" id="matrix-table">
+                        <thead>
+                            <tr>
+                                <th style="width:30%">업체 / 카테고리 / 상품</th>
+                                <th style="width:25%">상품코드</th>
+                                <th style="width:20%">매출액</th>
+                                <th style="width:15%">판매량</th>
+                                <th style="width:10%">상세</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrix-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let charts = {};
+
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return Math.round(num).toLocaleString('ko-KR');
+        }
+
+        function formatMoney(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return Math.round(num).toLocaleString('ko-KR') + '원';
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.chart-section').forEach(s => s.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-section').classList.add('active');
+        }
+
+        async function loadSummary() {
+            try {
+                const response = await fetch('/api/summary');
+                const data = await response.json();
+
+                if (data.original) {
+                    document.getElementById('total-sales').textContent = formatMoney(data.original.total_sales);
+                    document.getElementById('total-qty').textContent = formatNumber(data.original.total_qty) + '개';
+                    document.getElementById('product-count').textContent = formatNumber(data.original.unique_products) + '개';
+                    document.getElementById('supplier-count').textContent = formatNumber(data.original.unique_suppliers) + '개';
+                    document.getElementById('category-count').textContent = formatNumber(data.original.unique_categories) + '개';
+                }
+
+                const totalRecords = (data.original?.total_records || 0) + (data.monthly?.total_records || 0);
+                document.getElementById('total-records').textContent = formatNumber(totalRecords) + '건';
+
+            } catch (e) {
+                console.error('Summary load error:', e);
+            }
+        }
+
+        async function loadSupplierData() {
+            try {
+                const response = await fetch('/api/sales-by-supplier');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#supplier-table tbody').innerHTML =
+                        '<tr><td colspan="5" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다. 파일을 업로드해주세요.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#supplier-table tbody');
+                tbody.innerHTML = data.map((item, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td class="supplier">${item.업체명 || '-'}</td>
+                        <td class="money">${formatMoney(item.매출액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                        <td>${formatNumber(item.상품수)}개</td>
+                    </tr>
+                `).join('');
+
+                if (charts.supplier) charts.supplier.destroy();
+
+                const ctx = document.getElementById('supplierChart').getContext('2d');
+                charts.supplier = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.slice(0, 10).map(d => d.업체명 || '-'),
+                        datasets: [{
+                            label: '매출액',
+                            data: data.slice(0, 10).map(d => d.매출액),
+                            backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { callback: v => (v / 1000000).toFixed(0) + 'M' }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Supplier data error:', e);
+            }
+        }
+
+        async function loadCategoryData() {
+            try {
+                const response = await fetch('/api/sales-by-category');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#category-table tbody').innerHTML =
+                        '<tr><td colspan="5" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#category-table tbody');
+                tbody.innerHTML = data.map((item, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td class="category">${item.카테고리 || '-'}</td>
+                        <td class="money">${formatMoney(item.매출액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                        <td>${formatNumber(item.상품수)}개</td>
+                    </tr>
+                `).join('');
+
+                if (charts.category) charts.category.destroy();
+
+                const ctx = document.getElementById('categoryChart').getContext('2d');
+                charts.category = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.slice(0, 8).map(d => d.카테고리 || '-'),
+                        datasets: [{
+                            data: data.slice(0, 8).map(d => d.매출액),
+                            backgroundColor: [
+                                '#667eea', '#764ba2', '#f093fb', '#f5576c',
+                                '#4facfe', '#00f2fe', '#43e97b', '#fa709a'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { position: 'right' } }
+                    }
+                });
+            } catch (e) {
+                console.error('Category data error:', e);
+            }
+        }
+
+        async function loadProductsData() {
+            try {
+                const response = await fetch('/api/top-products');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#products-table tbody').innerHTML =
+                        '<tr><td colspan="7" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#products-table tbody');
+                tbody.innerHTML = data.map((item, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${item.상품코드}</td>
+                        <td>${item.상품명}</td>
+                        <td class="supplier">${item.업체명 || '-'}</td>
+                        <td class="category">${item.카테고리 || '-'}</td>
+                        <td class="money">${formatMoney(item.실판매금액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Products data error:', e);
+            }
+        }
+
+        async function loadDailyData() {
+            try {
+                const response = await fetch('/api/daily-sales');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#daily-table tbody').innerHTML =
+                        '<tr><td colspan="4" style="text-align:center; color:#888; padding:30px;">월별 데이터가 없습니다. 월별 데이터를 업로드해주세요.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#daily-table tbody');
+                tbody.innerHTML = data.map(item => `
+                    <tr>
+                        <td>${item.판매일자}</td>
+                        <td class="money">${formatMoney(item.실판매금액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                        <td>${formatNumber(item.건수)}건</td>
+                    </tr>
+                `).join('');
+
+                if (charts.daily) charts.daily.destroy();
+
+                const ctx = document.getElementById('dailyChart').getContext('2d');
+                charts.daily = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => d.판매일자 ? d.판매일자.slice(5) : '-'),
+                        datasets: [{
+                            label: '매출액',
+                            data: data.map(d => d.실판매금액),
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { callback: v => (v / 1000000).toFixed(0) + 'M' }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Daily data error:', e);
+            }
+        }
+
+        async function loadStoreData() {
+            try {
+                const response = await fetch('/api/store-sales');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#store-table tbody').innerHTML =
+                        '<tr><td colspan="4" style="text-align:center; color:#888; padding:30px;">매장 데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#store-table tbody');
+                tbody.innerHTML = data.map((item, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td>${item.매장명}</td>
+                        <td class="money">${formatMoney(item.실판매금액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                    </tr>
+                `).join('');
+
+                if (charts.store) charts.store.destroy();
+
+                const ctx = document.getElementById('storeChart').getContext('2d');
+                charts.store = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.slice(0, 10).map(d => d.매장명),
+                        datasets: [{
+                            label: '매출액',
+                            data: data.slice(0, 10).map(d => d.실판매금액),
+                            backgroundColor: 'rgba(118, 75, 162, 0.8)',
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                ticks: { callback: v => (v / 1000000).toFixed(0) + 'M' }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Store data error:', e);
+            }
+        }
+
+        let matrixData = [];
+
+        async function loadMatrixData() {
+            try {
+                const response = await fetch('/api/supplier-category');
+                matrixData = await response.json();
+
+                if (!matrixData || matrixData.length === 0) {
+                    document.getElementById('matrix-body').innerHTML =
+                        '<tr><td colspan="5" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                renderMatrix();
+            } catch (e) {
+                console.error('Matrix data error:', e);
+            }
+        }
+
+        function renderMatrix() {
+            const tbody = document.getElementById('matrix-body');
+            let html = '';
+
+            matrixData.forEach((supplier, sIdx) => {
+                const catCount = supplier.categories ? supplier.categories.length : 0;
+                html += `
+                    <tr class="row-supplier" data-supplier="${sIdx}" onclick="toggleSupplier(${sIdx})">
+                        <td><span class="toggle-icon">▶</span>🏭 ${supplier.업체명} <span class="cat-count">${catCount}개 카테고리</span></td>
+                        <td>-</td>
+                        <td class="money">${formatMoney(supplier.total)}</td>
+                        <td class="qty">${formatNumber(supplier.total_qty)}개</td>
+                        <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleSupplier(${sIdx})">펼치기</button></td>
+                    </tr>
+                `;
+
+                if (supplier.categories) {
+                    supplier.categories.forEach((cat, cIdx) => {
+                        const prodCount = cat.products ? cat.products.length : 0;
+                        html += `
+                            <tr class="row-category" data-supplier="${sIdx}" data-category="${cIdx}" onclick="toggleCategory(${sIdx}, ${cIdx})">
+                                <td><span class="toggle-icon">▶</span>📁 ${cat.카테고리} <span class="cat-count">${prodCount}개 상품</span></td>
+                                <td>-</td>
+                                <td class="money">${formatMoney(cat.total)}</td>
+                                <td class="qty">${formatNumber(cat.total_qty)}개</td>
+                                <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleCategory(${sIdx}, ${cIdx})">상품보기</button></td>
+                            </tr>
+                        `;
+
+                        if (cat.products) {
+                            cat.products.forEach((prod, pIdx) => {
+                                html += `
+                                    <tr class="row-product" data-supplier="${sIdx}" data-category="${cIdx}">
+                                        <td><span class="product-rank">${pIdx + 1}</span>${prod.상품명}</td>
+                                        <td>${prod.상품코드}</td>
+                                        <td class="money">${formatMoney(prod.매출액)}</td>
+                                        <td class="qty">${formatNumber(prod.판매량)}개</td>
+                                        <td></td>
+                                    </tr>
+                                `;
+                            });
+                        }
+                    });
+                }
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function toggleSupplier(sIdx) {
+            const supplierRow = document.querySelector(`.row-supplier[data-supplier="${sIdx}"]`);
+            const categoryRows = document.querySelectorAll(`.row-category[data-supplier="${sIdx}"]`);
+            const productRows = document.querySelectorAll(`.row-product[data-supplier="${sIdx}"]`);
+
+            const isExpanded = supplierRow.classList.contains('expanded');
+
+            if (isExpanded) {
+                supplierRow.classList.remove('expanded');
+                categoryRows.forEach(row => {
+                    row.style.display = 'none';
+                    row.classList.remove('expanded');
+                });
+                productRows.forEach(row => row.style.display = 'none');
+            } else {
+                supplierRow.classList.add('expanded');
+                categoryRows.forEach(row => row.style.display = 'table-row');
+            }
+        }
+
+        function toggleCategory(sIdx, cIdx) {
+            const categoryRow = document.querySelector(`.row-category[data-supplier="${sIdx}"][data-category="${cIdx}"]`);
+            const productRows = document.querySelectorAll(`.row-product[data-supplier="${sIdx}"][data-category="${cIdx}"]`);
+
+            const isExpanded = categoryRow.classList.contains('expanded');
+
+            if (isExpanded) {
+                categoryRow.classList.remove('expanded');
+                productRows.forEach(row => row.style.display = 'none');
+            } else {
+                categoryRow.classList.add('expanded');
+                productRows.forEach(row => row.style.display = 'table-row');
+            }
+        }
+
+        function exportData(type) {
+            window.location.href = `/export/${type}`;
+            showToast('Excel 파일 다운로드가 시작됩니다.');
+        }
+
+        async function saveReport() {
+            try {
+                const response = await fetch('/save-report', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`리포트가 저장되었습니다: ${data.filename}`);
+                } else {
+                    showToast('리포트 저장 실패', 'error');
+                }
+            } catch (e) {
+                showToast('리포트 저장 오류', 'error');
+            }
+        }
+
+        async function loadAllData() {
+            await loadSummary();
+            await loadSupplierData();
+            await loadCategoryData();
+            await loadProductsData();
+            await loadDailyData();
+            await loadStoreData();
+            await loadMatrixData();
+        }
+
+        document.addEventListener('DOMContentLoaded', loadAllData);
+    </script>
+</body>
+</html>

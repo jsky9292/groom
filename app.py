@@ -13,7 +13,7 @@ from database import (
     get_upload_files, delete_file_data,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
     get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
-    get_supplier_category_matrix, parse_classification,
+    get_supplier_category_matrix, get_store_category_matrix, parse_classification,
     verify_admin, change_password, get_admin_info
 )
 
@@ -248,6 +248,13 @@ def api_store_sales():
 @login_required
 def api_supplier_category():
     data = get_supplier_category_matrix()
+    return jsonify(data)
+
+@app.route('/api/store-category')
+@login_required
+def api_store_category():
+    """매장별 상세 분석 - 매장→카테고리→상품 드릴다운"""
+    data = get_store_category_matrix()
     return jsonify(data)
 
 @app.route('/api/upload', methods=['POST'])

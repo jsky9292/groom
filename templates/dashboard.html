@@ -427,6 +427,7 @@
             <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
             <button class="tab" onclick="showTab('store')">🏪 매장별</button>
             <button class="tab" onclick="showTab('matrix')">📊 업체-카테고리</button>
+            <button class="tab" onclick="showTab('storeDetail')">🏬 매장별 상세</button>
         </div>
 
         <!-- 업체별 섹션 -->
@@ -605,6 +606,33 @@
                             </tr>
                         </thead>
                         <tbody id="matrix-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 매장별 상세 분석 섹션 -->
+        <div id="storeDetail-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">🏬 매장 → 카테고리 → 상품 분석</h3>
+                    <button class="btn btn-primary" onclick="exportData('storeCategory')">📥 Excel 저장</button>
+                </div>
+                <p style="color:#666; margin-bottom:15px; font-size:13px;">
+                    💡 <strong>클릭하여 펼치기/접기:</strong> 매장 클릭 → 해당 매장의 카테고리별 매출 → 카테고리 클릭 → 잘 팔리는 상품 보기 (매출액 내림차순)
+                </p>
+                <div class="table-wrapper" style="max-height:700px;">
+                    <table class="data-table" id="storeDetail-table">
+                        <thead>
+                            <tr>
+                                <th style="width:30%">매장 / 카테고리 / 상품</th>
+                                <th style="width:25%">상품코드</th>
+                                <th style="width:20%">매출액</th>
+                                <th style="width:15%">판매량</th>
+                                <th style="width:10%">상세</th>
+                            </tr>
+                        </thead>
+                        <tbody id="storeDetail-body"></tbody>
                     </table>
                 </div>
             </div>
@@ -1010,6 +1038,115 @@
             }
         }
 
+        // ===== 매장별 상세 분석 =====
+        let storeDetailData = [];
+
+        async function loadStoreDetailData() {
+            try {
+                const response = await fetch('/api/store-category');
+                storeDetailData = await response.json();
+
+                if (!storeDetailData || storeDetailData.length === 0) {
+                    document.getElementById('storeDetail-body').innerHTML =
+                        '<tr><td colspan="5" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                renderStoreDetail();
+            } catch (e) {
+                console.error('Store detail data error:', e);
+            }
+        }
+
+        function renderStoreDetail() {
+            const tbody = document.getElementById('storeDetail-body');
+            let html = '';
+
+            storeDetailData.forEach((store, storeIdx) => {
+                // 매장 행
+                html += `
+                    <tr class="row-store" data-store="${storeIdx}" onclick="toggleStore(${storeIdx})" style="cursor:pointer; background:#f8f9fa;">
+                        <td>
+                            <span class="rank" style="background:#1565c0; color:white; padding:2px 8px; border-radius:10px; margin-right:8px;">${storeIdx + 1}</span>
+                            <strong style="font-size:14px;">🏬 ${store.매장명}</strong>
+                            <span style="color:#888; font-size:12px; margin-left:5px;">(${store.categories.length}개 카테고리)</span>
+                        </td>
+                        <td>-</td>
+                        <td class="money" style="font-weight:bold;">${formatMoney(store.total)}</td>
+                        <td class="qty">${formatNumber(store.total_qty)}</td>
+                        <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleStore(${storeIdx})">펼치기</button></td>
+                    </tr>`;
+
+                // 카테고리 행 (기본 숨김)
+                store.categories.forEach((cat, catIdx) => {
+                    html += `
+                        <tr class="row-store-category" data-store="${storeIdx}" data-category="${catIdx}" onclick="toggleStoreCategory(${storeIdx}, ${catIdx})" style="display:none; cursor:pointer; background:#e3f2fd;">
+                            <td style="padding-left:40px;">
+                                <span class="rank" style="background:#ef6c00; color:white; padding:2px 6px; border-radius:8px; font-size:11px; margin-right:5px;">${catIdx + 1}</span>
+                                📁 ${cat.카테고리}
+                                <span style="color:#888; font-size:11px; margin-left:5px;">(${cat.products.length}개 상품)</span>
+                            </td>
+                            <td>-</td>
+                            <td class="money">${formatMoney(cat.total)}</td>
+                            <td class="qty">${formatNumber(cat.total_qty)}</td>
+                            <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleStoreCategory(${storeIdx}, ${catIdx})">상품보기</button></td>
+                        </tr>`;
+
+                    // 상품 행 (기본 숨김)
+                    cat.products.forEach((prod, prodIdx) => {
+                        html += `
+                            <tr class="row-store-product" data-store="${storeIdx}" data-category="${catIdx}" style="display:none; background:#fff3e0;">
+                                <td style="padding-left:70px;">
+                                    <span style="color:#888; font-size:11px; margin-right:5px;">#${prodIdx + 1}</span>
+                                    ${prod.상품명 || '-'}
+                                </td>
+                                <td style="font-size:12px; color:#666;">${prod.상품코드 || '-'}</td>
+                                <td class="money">${formatMoney(prod.매출액)}</td>
+                                <td class="qty">${formatNumber(prod.판매량)}</td>
+                                <td>-</td>
+                            </tr>`;
+                    });
+                });
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        function toggleStore(storeIdx) {
+            const storeRow = document.querySelector(`.row-store[data-store="${storeIdx}"]`);
+            const categoryRows = document.querySelectorAll(`.row-store-category[data-store="${storeIdx}"]`);
+            const productRows = document.querySelectorAll(`.row-store-product[data-store="${storeIdx}"]`);
+
+            const isExpanded = storeRow.classList.contains('expanded');
+
+            if (isExpanded) {
+                storeRow.classList.remove('expanded');
+                categoryRows.forEach(row => {
+                    row.style.display = 'none';
+                    row.classList.remove('expanded');
+                });
+                productRows.forEach(row => row.style.display = 'none');
+            } else {
+                storeRow.classList.add('expanded');
+                categoryRows.forEach(row => row.style.display = 'table-row');
+            }
+        }
+
+        function toggleStoreCategory(storeIdx, catIdx) {
+            const categoryRow = document.querySelector(`.row-store-category[data-store="${storeIdx}"][data-category="${catIdx}"]`);
+            const productRows = document.querySelectorAll(`.row-store-product[data-store="${storeIdx}"][data-category="${catIdx}"]`);
+
+            const isExpanded = categoryRow.classList.contains('expanded');
+
+            if (isExpanded) {
+                categoryRow.classList.remove('expanded');
+                productRows.forEach(row => row.style.display = 'none');
+            } else {
+                categoryRow.classList.add('expanded');
+                productRows.forEach(row => row.style.display = 'table-row');
+            }
+        }
+
         function exportData(type) {
             window.location.href = `/export/${type}`;
             showToast('Excel 파일 다운로드가 시작됩니다.');
@@ -1062,6 +1199,7 @@
             await loadDailyData();
             await loadStoreData();
             await loadMatrixData();
+            await loadStoreDetailData();
         }
 
         document.addEventListener('DOMContentLoaded', loadAllData);

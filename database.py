@@ -652,6 +652,72 @@ def get_supplier_category_matrix():
 
     return sorted_suppliers
 
+def get_store_category_matrix():
+    """매장-카테고리-상품 계층 구조 (드릴다운용) - 매장별 뭐가 많이 팔리는지 분석"""
+    result = execute_query('''
+        SELECT
+            매장명,
+            분류명,
+            상품코드,
+            상품명,
+            SUM(실판매금액) as 매출액,
+            SUM(판매량) as 판매량
+        FROM monthly_sales
+        WHERE 매장명 IS NOT NULL AND 분류명 IS NOT NULL
+        GROUP BY 매장명, 분류명, 상품코드, 상품명
+        ORDER BY 매출액 DESC
+    ''')
+
+    # 계층 구조 생성
+    hierarchy = {}
+
+    for row in result:
+        매장명 = row['매장명']
+        분류명 = row['분류명'] or '기타'
+        상품코드 = row['상품코드']
+        상품명 = row['상품명']
+        매출액 = float(row['매출액'] or 0)
+        판매량 = float(row['판매량'] or 0)
+
+        if 매장명 not in hierarchy:
+            hierarchy[매장명] = {
+                '매장명': 매장명,
+                'total': 0,
+                'total_qty': 0,
+                'categories': {}
+            }
+
+        if 분류명 not in hierarchy[매장명]['categories']:
+            hierarchy[매장명]['categories'][분류명] = {
+                '카테고리': 분류명,
+                'total': 0,
+                'total_qty': 0,
+                'products': []
+            }
+
+        hierarchy[매장명]['categories'][분류명]['products'].append({
+            '상품코드': 상품코드,
+            '상품명': 상품명,
+            '매출액': 매출액,
+            '판매량': 판매량
+        })
+        hierarchy[매장명]['categories'][분류명]['total'] += 매출액
+        hierarchy[매장명]['categories'][분류명]['total_qty'] += 판매량
+        hierarchy[매장명]['total'] += 매출액
+        hierarchy[매장명]['total_qty'] += 판매량
+
+    # 매장 정렬 (총 매출 내림차순)
+    sorted_stores = sorted(hierarchy.values(), key=lambda x: x['total'], reverse=True)[:50]  # 상위 50개 매장
+
+    # 각 매장 내 카테고리와 상품 정렬
+    for store in sorted_stores:
+        categories_list = sorted(store['categories'].values(), key=lambda x: x['total'], reverse=True)
+        for cat in categories_list:
+            cat['products'] = sorted(cat['products'], key=lambda x: x['매출액'], reverse=True)[:15]  # 카테고리당 상위 15개
+        store['categories'] = categories_list
+
+    return sorted_stores
+
 # ============ 관리자 계정 함수들 ============
 
 def verify_admin(username, password):

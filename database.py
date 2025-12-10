@@ -189,6 +189,12 @@ def save_sales_data(df, file_id):
 
     inserted = 0
     for _, row in df.iterrows():
+        # 합계 행이나 잘못된 데이터 필터링
+        상품코드 = row.get('상품코드')
+        상품명 = str(row.get('상품명', ''))
+        if pd.isna(상품코드) or 상품코드 == '' or 'row(s)' in 상품명:
+            continue
+
         분류명 = row.get('분류명', '')
         카테고리, 업체명 = parse_classification(분류명)
 

@@ -347,10 +347,10 @@ def export_data(data_type):
 
     return send_file(filepath, as_attachment=True, download_name=filename)
 
-@app.route('/save-report', methods=['POST'])
+@app.route('/save-report', methods=['POST', 'GET'])
 @login_required
 def save_report():
-    """현재 대시보드 데이터를 리포트로 저장"""
+    """현재 대시보드 데이터를 리포트로 다운로드"""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     export_path = os.path.join(DATA_DIR, 'exports')
     os.makedirs(export_path, exist_ok=True)
@@ -366,7 +366,13 @@ def save_report():
         pd.DataFrame(get_store_sales()).to_excel(writer, sheet_name='매장별', index=False)
         pd.DataFrame(get_supplier_category_matrix()).to_excel(writer, sheet_name='업체_카테고리', index=False)
 
-    return jsonify({'success': True, 'filename': filename, 'path': filepath})
+    # 파일 다운로드로 반환 (사용자가 저장 위치 선택 가능)
+    return send_file(
+        filepath,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 # Vercel 서버리스에서는 앱 로드 시 DB 초기화
 init_database()

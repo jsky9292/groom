@@ -108,9 +108,12 @@
         }
 
         .card-value {
-            font-size: 26px;
+            font-size: 24px;
             font-weight: 700;
             color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .card-sub {
@@ -623,6 +626,19 @@
             return Math.round(num).toLocaleString('ko-KR') + '원';
         }
 
+        // 큰 금액 축약 표시 (억/만 단위)
+        function formatMoneyShort(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            if (num >= 100000000) {
+                return (num / 100000000).toFixed(1) + '억원';
+            } else if (num >= 10000000) {
+                return (num / 10000000).toFixed(1) + '천만원';
+            } else if (num >= 10000) {
+                return (num / 10000).toFixed(0) + '만원';
+            }
+            return Math.round(num).toLocaleString('ko-KR') + '원';
+        }
+
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             toast.textContent = message;
@@ -644,7 +660,7 @@
                 const data = await response.json();
 
                 if (data.original) {
-                    document.getElementById('total-sales').textContent = formatMoney(data.original.total_sales);
+                    document.getElementById('total-sales').textContent = formatMoneyShort(data.original.total_sales);
                     document.getElementById('total-qty').textContent = formatNumber(data.original.total_qty) + '개';
                     document.getElementById('product-count').textContent = formatNumber(data.original.unique_products) + '개';
                     document.getElementById('supplier-count').textContent = formatNumber(data.original.unique_suppliers) + '개';
@@ -999,19 +1015,10 @@
             showToast('Excel 파일 다운로드가 시작됩니다.');
         }
 
-        async function saveReport() {
-            try {
-                const response = await fetch('/save-report', { method: 'POST' });
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast(`리포트가 저장되었습니다: ${data.filename}`);
-                } else {
-                    showToast('리포트 저장 실패', 'error');
-                }
-            } catch (e) {
-                showToast('리포트 저장 오류', 'error');
-            }
+        function saveReport() {
+            // 브라우저 다운로드 방식 - 사용자가 저장 위치 선택 가능
+            window.location.href = '/save-report';
+            showToast('리포트 다운로드가 시작됩니다.');
         }
 
         async function loadAllData() {

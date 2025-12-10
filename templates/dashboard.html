@@ -425,6 +425,7 @@
             <button class="tab" onclick="showTab('category')">📁 카테고리별</button>
             <button class="tab" onclick="showTab('products')">🏆 베스트셀러</button>
             <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
+            <button class="tab" onclick="showTab('monthly')">📆 월별 현황</button>
             <button class="tab" onclick="showTab('store')">🏪 매장별</button>
             <button class="tab" onclick="showTab('matrix')">📊 업체-카테고리</button>
             <button class="tab" onclick="showTab('storeDetail')">🏬 매장별 상세</button>
@@ -544,6 +545,37 @@
                                 <th>매출액</th>
                                 <th>판매량</th>
                                 <th>건수</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 월별 현황 섹션 -->
+        <div id="monthly-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">월별 매출 추이</h3>
+                    <button class="btn btn-primary" onclick="exportData('monthly')">📥 Excel 저장</button>
+                </div>
+                <canvas id="monthlyChart" height="150"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">월별 상세 데이터</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="monthly-table">
+                        <thead>
+                            <tr>
+                                <th>월</th>
+                                <th>매출액</th>
+                                <th>판매량</th>
+                                <th>건수</th>
+                                <th>매장수</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -883,6 +915,58 @@
             }
         }
 
+        async function loadMonthlyData() {
+            try {
+                const response = await fetch('/api/monthly-sales');
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#monthly-table tbody').innerHTML =
+                        '<tr><td colspan="5" style="text-align:center; color:#888; padding:30px;">월별 데이터가 없습니다.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#monthly-table tbody');
+                tbody.innerHTML = data.map(item => `
+                    <tr>
+                        <td>${item.월}</td>
+                        <td class="money">${formatMoney(item.실판매금액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                        <td>${formatNumber(item.건수)}건</td>
+                        <td>${formatNumber(item.매장수)}개</td>
+                    </tr>
+                `).join('');
+
+                if (charts.monthly) charts.monthly.destroy();
+
+                const ctx = document.getElementById('monthlyChart').getContext('2d');
+                charts.monthly = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.월),
+                        datasets: [{
+                            label: '매출액',
+                            data: data.map(d => d.실판매금액),
+                            backgroundColor: '#667eea',
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { callback: v => (v / 100000000).toFixed(1) + '억' }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Monthly data error:', e);
+            }
+        }
+
         async function loadStoreData() {
             try {
                 const response = await fetch('/api/store-sales');
@@ -1197,6 +1281,7 @@
             await loadCategoryData();
             await loadProductsData();
             await loadDailyData();
+            await loadMonthlyData();
             await loadStoreData();
             await loadMatrixData();
             await loadStoreDetailData();

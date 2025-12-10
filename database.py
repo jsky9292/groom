@@ -40,8 +40,11 @@ def turso_execute(sql, params=None):
         for p in params:
             if p is None:
                 args.append({"type": "null"})
-            elif isinstance(p, (int, float)):
-                args.append({"type": "float" if isinstance(p, float) else "integer", "value": str(p)})
+            elif isinstance(p, int) and not isinstance(p, bool):
+                args.append({"type": "integer", "value": str(p)})
+            elif isinstance(p, float):
+                # Turso API는 float 값을 숫자 그대로 보내야 함 (문자열 아님)
+                args.append({"type": "float", "value": p})
             else:
                 args.append({"type": "text", "value": str(p)})
 

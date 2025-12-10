@@ -556,6 +556,21 @@ def get_daily_sales():
         ORDER BY 판매일자
     ''')
 
+def get_monthly_sales():
+    """월별 매출 (일별 데이터를 월 단위로 집계)"""
+    return execute_query('''
+        SELECT
+            SUBSTR(판매일자, 1, 7) as 월,
+            SUM(실판매금액) as 실판매금액,
+            SUM(판매량) as 판매량,
+            COUNT(*) as 건수,
+            COUNT(DISTINCT 매장명) as 매장수
+        FROM monthly_sales
+        WHERE 판매일자 IS NOT NULL
+        GROUP BY SUBSTR(판매일자, 1, 7)
+        ORDER BY 월
+    ''')
+
 def get_store_sales():
     """매장별 매출"""
     return execute_query('''

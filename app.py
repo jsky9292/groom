@@ -12,7 +12,7 @@ from database import (
     save_upload_file, save_sales_data, save_monthly_data,
     get_upload_files, delete_file_data,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
-    get_top_products, get_daily_sales, get_store_sales,
+    get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
     get_supplier_category_matrix, parse_classification,
     verify_admin, change_password, get_admin_info
 )
@@ -232,6 +232,12 @@ def api_daily_sales():
     data = get_daily_sales()
     return jsonify(data)
 
+@app.route('/api/monthly-sales')
+@login_required
+def api_monthly_sales():
+    data = get_monthly_sales()
+    return jsonify(data)
+
 @app.route('/api/store-sales')
 @login_required
 def api_store_sales():
@@ -310,6 +316,8 @@ def api_delete_file():
 @login_required
 def export_data(data_type):
     """데이터 Excel로 내보내기"""
+    from io import BytesIO
+
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     if data_type == 'supplier':
@@ -336,29 +344,33 @@ def export_data(data_type):
         data = get_supplier_category_matrix()
         df = pd.DataFrame(data)
         filename = f'업체_카테고리_매트릭스_{timestamp}.xlsx'
+    elif data_type == 'monthly':
+        data = get_monthly_sales()
+        df = pd.DataFrame(data)
+        filename = f'월별_매출_{timestamp}.xlsx'
     else:
         return jsonify({'error': 'Invalid data type'}), 400
 
-    export_path = os.path.join(DATA_DIR, 'exports')
-    os.makedirs(export_path, exist_ok=True)
-    filepath = os.path.join(export_path, filename)
+    # 메모리에서 Excel 파일 생성 (Vercel 서버리스 호환)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
 
-    df.to_excel(filepath, index=False)
-
-    return send_file(filepath, as_attachment=True, download_name=filename)
+    return send_file(output, as_attachment=True, download_name=filename,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.route('/save-report', methods=['POST', 'GET'])
 @login_required
 def save_report():
     """현재 대시보드 데이터를 리포트로 다운로드"""
+    from io import BytesIO
+
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    export_path = os.path.join(DATA_DIR, 'exports')
-    os.makedirs(export_path, exist_ok=True)
-
     filename = f'판매현황_종합리포트_{timestamp}.xlsx'
-    filepath = os.path.join(export_path, filename)
 
-    with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+    # 메모리에서 Excel 파일 생성 (Vercel 서버리스 호환)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         pd.DataFrame(get_sales_by_supplier()).to_excel(writer, sheet_name='업체별매출', index=False)
         pd.DataFrame(get_sales_by_category()).to_excel(writer, sheet_name='카테고리별', index=False)
         pd.DataFrame(get_top_products()).to_excel(writer, sheet_name='베스트셀러', index=False)
@@ -366,9 +378,11 @@ def save_report():
         pd.DataFrame(get_store_sales()).to_excel(writer, sheet_name='매장별', index=False)
         pd.DataFrame(get_supplier_category_matrix()).to_excel(writer, sheet_name='업체_카테고리', index=False)
 
-    # 파일 다운로드로 반환 (사용자가 저장 위치 선택 가능)
+    output.seek(0)
+
+    # 메모리에서 직접 반환 (파일 저장 없이)
     return send_file(
-        filepath,
+        output,
         as_attachment=True,
         download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

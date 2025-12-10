@@ -8,7 +8,7 @@ import json
 
 # 데이터베이스 모듈 임포트
 from database import (
-    init_database,
+    init_database, execute_write,
     save_upload_file, save_sales_data, save_monthly_data,
     get_upload_files, delete_file_data,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
@@ -98,11 +98,7 @@ def process_and_save_file(filepath, file_type, original_name, saved_name):
                 total_rows += rows
 
             # row_count 업데이트
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute('UPDATE upload_files SET row_count = ? WHERE id = ?', (total_rows, file_id))
-            conn.commit()
-            conn.close()
+            execute_write('UPDATE upload_files SET row_count = ? WHERE id = ?', (total_rows, file_id))
 
         elif file_type == 'custom':
             # 커스텀 데이터

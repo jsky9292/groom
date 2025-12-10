@@ -368,8 +368,11 @@ def save_report():
 
     return jsonify({'success': True, 'filename': filename, 'path': filepath})
 
+# Vercel 서버리스에서는 앱 로드 시 DB 초기화
+init_database()
+
 if __name__ == '__main__':
     print("데이터베이스 초기화 중...")
-    init_database()
+    print(f"DB 경로: {DB_PATH if 'DB_PATH' in dir() else 'N/A'}")
     print("서버 시작: http://localhost:5000")
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -13,8 +13,8 @@ def get_turso_http_url():
     url = TURSO_URL.replace('libsql://', 'https://')
     return url
 
-# 로컬 SQLite 폴백
-IS_LOCAL = not os.environ.get('VERCEL', False) and not os.environ.get('USE_TURSO', False)
+# 로컬 SQLite 폴백 (Vercel 환경변수는 문자열 '1'로 설정됨)
+IS_LOCAL = not os.environ.get('VERCEL') and not os.environ.get('USE_TURSO')
 
 # sqlite3는 로컬 모드에서만 import
 sqlite3 = None

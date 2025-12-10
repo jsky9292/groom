@@ -380,6 +380,16 @@
             uploadFile(file);
         }
 
+        // 파일을 텍스트로 읽기 (인코딩 지정)
+        function readFileAsText(file, encoding = 'utf-8') {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file, encoding);
+            });
+        }
+
         async function uploadFile(file) {
             const progressDiv = document.getElementById('uploadProgress');
             const progressFill = document.getElementById('progressFill');
@@ -390,29 +400,54 @@
             progressText.textContent = '파일 읽는 중...';
 
             try {
-                // 브라우저에서 엑셀 파일 읽기
-                const data = await file.arrayBuffer();
-                const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
-
                 let allRows = [];
                 let sheetInfo = [];
+                const ext = file.name.split('.').pop().toLowerCase();
 
-                // 모든 시트 데이터 수집
-                for (const sheetName of workbook.SheetNames) {
-                    const sheet = workbook.Sheets[sheetName];
-                    const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
+                // 원본 데이터 (.xls 확장자지만 실제 TSV 형식) 또는 CSV는 텍스트로 파싱
+                if (selectedFileType === 'original' || ext === 'csv') {
+                    // 텍스트 파일로 읽기 (cp949 인코딩)
+                    const text = await readFileAsText(file, 'euc-kr');
+                    const lines = text.split('\n').filter(line => line.trim());
 
-                    if (selectedFileType === 'monthly') {
-                        // 월별 데이터: 시트별로 data_type 지정
-                        let dataType = sheetName;
-                        if (sheetName.includes('의류')) dataType = '의류';
-                        else if (sheetName.includes('신발')) dataType = '신발';
-                        else if (sheetName.includes('잡화')) dataType = '잡화';
-
-                        sheetInfo.push({ sheetName, dataType, startIdx: allRows.length, count: jsonData.length });
+                    if (lines.length < 2) {
+                        throw new Error('데이터가 없습니다.');
                     }
 
-                    allRows = allRows.concat(jsonData.map(row => ({...row, _sheet: sheetName})));
+                    // 탭 또는 쉼표로 구분
+                    const delimiter = lines[0].includes('\t') ? '\t' : ',';
+                    const headers = lines[0].split(delimiter).map(h => h.trim().replace(/"/g, ''));
+
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(delimiter).map(v => v.trim().replace(/"/g, ''));
+                        if (values.length >= headers.length - 5) { // 일부 컬럼 누락 허용
+                            const row = {};
+                            headers.forEach((header, idx) => {
+                                row[header] = values[idx] !== undefined ? values[idx] : null;
+                            });
+                            allRows.push(row);
+                        }
+                    }
+                    console.log('TSV/CSV 파싱 완료:', allRows.length, '행, 컬럼:', headers.slice(0, 5));
+
+                } else {
+                    // 진짜 Excel 파일 (.xlsx, 월별 데이터)
+                    const data = await file.arrayBuffer();
+                    const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
+
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+                        if (selectedFileType === 'monthly') {
+                            let dataType = sheetName;
+                            if (sheetName.includes('의류')) dataType = '의류';
+                            else if (sheetName.includes('신발')) dataType = '신발';
+                            else if (sheetName.includes('잡화')) dataType = '잡화';
+                            sheetInfo.push({ sheetName, dataType, startIdx: allRows.length, count: jsonData.length });
+                        }
+                        allRows = allRows.concat(jsonData.map(row => ({...row, _sheet: sheetName})));
+                    }
                 }
 
                 progressText.textContent = `${allRows.length}행 데이터 처리 중...`;

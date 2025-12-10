@@ -309,7 +309,7 @@
                                 {% if file.file_type == 'original' %}원본{% elif file.file_type == 'monthly' %}월별{% else %}커스텀{% endif %}
                             </span>
                         </td>
-                        <td class="row-count">{{ "{:,}".format(file.row_count) }}행</td>
+                        <td class="row-count">{{ "{:,}".format(file.row_count|int) }}행</td>
                         <td class="file-date">{{ file.upload_date }}</td>
                         <td>
                             <div class="action-btns">

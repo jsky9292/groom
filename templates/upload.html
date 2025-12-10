@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>데이터 업로드 - 구름환경 판매데이터 분석</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -380,46 +381,103 @@
         }
 
         async function uploadFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('file_type', selectedFileType);
-
             const progressDiv = document.getElementById('uploadProgress');
             const progressFill = document.getElementById('progressFill');
             const progressText = document.getElementById('progressText');
 
             progressDiv.style.display = 'block';
             progressFill.style.width = '0%';
-            progressText.textContent = '업로드 및 DB 저장 중...';
+            progressText.textContent = '파일 읽는 중...';
 
             try {
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += 5;
-                    if (progress <= 90) progressFill.style.width = progress + '%';
-                }, 100);
+                // 브라우저에서 엑셀 파일 읽기
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
 
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
+                let allRows = [];
+                let sheetInfo = [];
 
-                clearInterval(progressInterval);
-                progressFill.style.width = '100%';
+                // 모든 시트 데이터 수집
+                for (const sheetName of workbook.SheetNames) {
+                    const sheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
-                const result = await response.json();
+                    if (selectedFileType === 'monthly') {
+                        // 월별 데이터: 시트별로 data_type 지정
+                        let dataType = sheetName;
+                        if (sheetName.includes('의류')) dataType = '의류';
+                        else if (sheetName.includes('신발')) dataType = '신발';
+                        else if (sheetName.includes('잡화')) dataType = '잡화';
 
-                if (result.success) {
-                    progressText.textContent = result.message;
-                    showToast(result.message, 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    progressText.textContent = '업로드 실패';
-                    showToast(result.error, 'error');
+                        sheetInfo.push({ sheetName, dataType, startIdx: allRows.length, count: jsonData.length });
+                    }
+
+                    allRows = allRows.concat(jsonData.map(row => ({...row, _sheet: sheetName})));
                 }
+
+                progressText.textContent = `${allRows.length}행 데이터 처리 중...`;
+
+                // 청크로 나누기 (300건씩)
+                const CHUNK_SIZE = 300;
+                const totalChunks = Math.ceil(allRows.length / CHUNK_SIZE);
+                let fileId = null;
+                let totalInserted = 0;
+
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * CHUNK_SIZE;
+                    const end = Math.min(start + CHUNK_SIZE, allRows.length);
+                    const chunk = allRows.slice(start, end);
+
+                    // 월별 데이터의 경우 data_type 결정
+                    let dataType = '';
+                    if (selectedFileType === 'monthly' && chunk.length > 0) {
+                        const firstRow = chunk[0];
+                        const info = sheetInfo.find(s => firstRow._sheet === s.sheetName);
+                        dataType = info ? info.dataType : firstRow._sheet;
+                    }
+
+                    // _sheet 필드 제거
+                    const cleanChunk = chunk.map(row => {
+                        const {_sheet, ...rest} = row;
+                        return rest;
+                    });
+
+                    progressText.textContent = `청크 ${i + 1}/${totalChunks} 저장 중... (${start}-${end}행)`;
+                    progressFill.style.width = ((i + 1) / totalChunks * 100) + '%';
+
+                    const response = await fetch('/api/upload-chunk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            file_id: fileId,
+                            file_type: selectedFileType,
+                            rows: cleanChunk,
+                            chunk_index: i,
+                            total_chunks: totalChunks,
+                            original_name: file.name,
+                            data_type: dataType
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (!result.success) {
+                        throw new Error(result.error || '청크 업로드 실패');
+                    }
+
+                    fileId = result.file_id;
+                    totalInserted += result.inserted;
+                }
+
+                progressFill.style.width = '100%';
+                progressText.textContent = `완료! ${totalInserted}행 저장됨`;
+                showToast(`파일 업로드 완료: ${totalInserted}행 저장됨`, 'success');
+                setTimeout(() => location.reload(), 1500);
+
             } catch (error) {
+                console.error('Upload error:', error);
                 progressText.textContent = '업로드 오류';
-                showToast('업로드 중 오류가 발생했습니다.', 'error');
+                showToast('업로드 중 오류: ' + error.message, 'error');
             }
         }
 

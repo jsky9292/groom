@@ -297,6 +297,57 @@ def api_upload():
 
     return jsonify({'success': False, 'error': '허용되지 않는 파일 형식입니다. (xls, xlsx, csv만 가능)'})
 
+@app.route('/api/upload-chunk', methods=['POST'])
+@login_required
+def api_upload_chunk():
+    """청크 데이터 업로드 API (브라우저에서 파싱된 JSON 데이터 수신)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': '데이터가 없습니다.'})
+
+        file_id = data.get('file_id')
+        file_type = data.get('file_type', 'original')
+        rows = data.get('rows', [])
+        chunk_index = data.get('chunk_index', 0)
+        total_chunks = data.get('total_chunks', 1)
+        original_name = data.get('original_name', 'unknown')
+        data_type = data.get('data_type', '')  # 월별 데이터용
+
+        if not rows:
+            return jsonify({'success': False, 'error': '데이터 행이 없습니다.'})
+
+        # 첫 번째 청크면 upload_files에 기록
+        if chunk_index == 0:
+            file_id = save_upload_file(f"chunk_{datetime.now().strftime('%Y%m%d_%H%M%S')}", original_name, file_type, 0)
+
+        # DataFrame으로 변환
+        df = pd.DataFrame(rows)
+
+        # 데이터 저장
+        if file_type == 'original':
+            inserted = save_sales_data(df, file_id)
+        elif file_type == 'monthly':
+            inserted = save_monthly_data(df, file_id, data_type)
+        else:
+            inserted = save_sales_data(df, file_id)
+
+        # row_count 업데이트
+        execute_write('UPDATE upload_files SET row_count = row_count + ? WHERE id = ?', (inserted, file_id))
+
+        return jsonify({
+            'success': True,
+            'file_id': file_id,
+            'inserted': inserted,
+            'chunk_index': chunk_index,
+            'total_chunks': total_chunks,
+            'message': f'청크 {chunk_index + 1}/{total_chunks} 저장 완료 ({inserted}건)'
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
 @app.route('/api/delete-file', methods=['POST'])
 @login_required
 def api_delete_file():

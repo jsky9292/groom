@@ -324,6 +324,12 @@ def api_upload_chunk():
         # DataFrame으로 변환
         df = pd.DataFrame(rows)
 
+        # 디버깅: 컬럼명과 첫 행 출력
+        print(f"[DEBUG] chunk_index={chunk_index}, rows_count={len(rows)}")
+        print(f"[DEBUG] columns: {list(df.columns)[:10]}")
+        if len(df) > 0:
+            print(f"[DEBUG] first_row: {df.iloc[0].to_dict()}")
+
         # 데이터 저장
         if file_type == 'original':
             inserted = save_sales_data(df, file_id)

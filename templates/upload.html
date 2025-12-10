@@ -452,18 +452,21 @@
 
                 progressText.textContent = `${allRows.length}행 데이터 처리 중...`;
 
-                // 청크로 나누기 (300건씩)
-                const CHUNK_SIZE = 300;
+                // 청크로 나누기 (1000건씩 - 속도 개선)
+                const CHUNK_SIZE = 1000;
+                const PARALLEL_REQUESTS = 3;  // 동시 요청 수
                 const totalChunks = Math.ceil(allRows.length / CHUNK_SIZE);
                 let fileId = null;
                 let totalInserted = 0;
+                let completedChunks = 0;
 
+                // 청크 준비
+                const chunks = [];
                 for (let i = 0; i < totalChunks; i++) {
                     const start = i * CHUNK_SIZE;
                     const end = Math.min(start + CHUNK_SIZE, allRows.length);
                     const chunk = allRows.slice(start, end);
 
-                    // 월별 데이터의 경우 data_type 결정
                     let dataType = '';
                     if (selectedFileType === 'monthly' && chunk.length > 0) {
                         const firstRow = chunk[0];
@@ -471,37 +474,66 @@
                         dataType = info ? info.dataType : firstRow._sheet;
                     }
 
-                    // _sheet 필드 제거
                     const cleanChunk = chunk.map(row => {
                         const {_sheet, ...rest} = row;
                         return rest;
                     });
 
-                    progressText.textContent = `청크 ${i + 1}/${totalChunks} 저장 중... (${start}-${end}행)`;
-                    progressFill.style.width = ((i + 1) / totalChunks * 100) + '%';
+                    chunks.push({ index: i, rows: cleanChunk, dataType, start, end });
+                }
 
-                    const response = await fetch('/api/upload-chunk', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            file_id: fileId,
-                            file_type: selectedFileType,
-                            rows: cleanChunk,
-                            chunk_index: i,
-                            total_chunks: totalChunks,
-                            original_name: file.name,
-                            data_type: dataType
-                        })
-                    });
+                // 첫 청크는 단독으로 보내서 file_id 받기
+                progressText.textContent = `파일 등록 중...`;
+                const firstChunk = chunks[0];
+                const firstResponse = await fetch('/api/upload-chunk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: null,
+                        file_type: selectedFileType,
+                        rows: firstChunk.rows,
+                        chunk_index: 0,
+                        total_chunks: totalChunks,
+                        original_name: file.name,
+                        data_type: firstChunk.dataType
+                    })
+                });
+                const firstResult = await firstResponse.json();
+                if (!firstResult.success) throw new Error(firstResult.error || '초기화 실패');
+                fileId = firstResult.file_id;
+                totalInserted += firstResult.inserted;
+                completedChunks = 1;
+                progressFill.style.width = (1 / totalChunks * 100) + '%';
 
-                    const result = await response.json();
+                // 나머지 청크는 병렬로 처리
+                const remainingChunks = chunks.slice(1);
+                for (let batch = 0; batch < remainingChunks.length; batch += PARALLEL_REQUESTS) {
+                    const batchChunks = remainingChunks.slice(batch, batch + PARALLEL_REQUESTS);
+                    progressText.textContent = `업로드 중... ${completedChunks}/${totalChunks} 완료 (${Math.round(completedChunks / totalChunks * 100)}%)`;
 
-                    if (!result.success) {
-                        throw new Error(result.error || '청크 업로드 실패');
+                    const promises = batchChunks.map(chunk =>
+                        fetch('/api/upload-chunk', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                file_id: fileId,
+                                file_type: selectedFileType,
+                                rows: chunk.rows,
+                                chunk_index: chunk.index,
+                                total_chunks: totalChunks,
+                                original_name: file.name,
+                                data_type: chunk.dataType
+                            })
+                        }).then(r => r.json())
+                    );
+
+                    const results = await Promise.all(promises);
+                    for (const result of results) {
+                        if (!result.success) console.error('청크 실패:', result.error);
+                        else totalInserted += result.inserted;
+                        completedChunks++;
                     }
-
-                    fileId = result.file_id;
-                    totalInserted += result.inserted;
+                    progressFill.style.width = (completedChunks / totalChunks * 100) + '%';
                 }
 
                 progressFill.style.width = '100%';

@@ -16,8 +16,13 @@ def get_turso_http_url():
 # 로컬 SQLite 폴백
 IS_LOCAL = not os.environ.get('VERCEL', False) and not os.environ.get('USE_TURSO', False)
 
+# sqlite3는 로컬 모드에서만 import
+sqlite3 = None
+DB_PATH = None
+
 if IS_LOCAL:
-    import sqlite3
+    import sqlite3 as _sqlite3
+    sqlite3 = _sqlite3
     DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sales_data.db')
 
 def turso_execute(sql, params=None):

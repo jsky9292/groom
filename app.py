@@ -8,7 +8,7 @@ import json
 
 # 데이터베이스 모듈 임포트
 from database import (
-    init_database, get_connection,
+    init_database,
     save_upload_file, save_sales_data, save_monthly_data,
     get_upload_files, delete_file_data,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,

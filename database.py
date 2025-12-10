@@ -91,6 +91,51 @@ def turso_execute(sql, params=None):
             }
     return {'columns': [], 'rows': [], 'last_insert_rowid': 0, 'rows_affected': 0}
 
+def turso_batch_execute(statements):
+    """Turso HTTP API로 여러 쿼리를 한 번에 실행 (배치 INSERT용)
+
+    Args:
+        statements: [(sql, params), (sql, params), ...] 형태의 리스트
+
+    Returns:
+        성공한 쿼리 수
+    """
+    if not statements:
+        return 0
+
+    url = get_turso_http_url()
+    headers = {
+        'Authorization': f'Bearer {TURSO_AUTH_TOKEN}',
+        'Content-Type': 'application/json'
+    }
+
+    requests_list = []
+    for sql, params in statements:
+        if params:
+            args = []
+            for p in params:
+                if p is None:
+                    args.append({"type": "null"})
+                elif isinstance(p, int) and not isinstance(p, bool):
+                    args.append({"type": "integer", "value": str(p)})
+                elif isinstance(p, float):
+                    args.append({"type": "float", "value": p})
+                else:
+                    args.append({"type": "text", "value": str(p)})
+            requests_list.append({"type": "execute", "stmt": {"sql": sql, "args": args}})
+        else:
+            requests_list.append({"type": "execute", "stmt": {"sql": sql}})
+
+    requests_list.append({"type": "close"})
+
+    body = {"requests": requests_list}
+
+    with httpx.Client(timeout=60.0) as client:
+        response = client.post(f"{url}/v2/pipeline", headers=headers, json=body)
+        response.raise_for_status()
+
+    return len(statements)
+
 def execute_query(query, params=None):
     """쿼리 실행 (Turso/SQLite 호환)"""
     if IS_LOCAL:
@@ -316,6 +361,19 @@ def save_sales_data(df, file_id):
         conn.commit()
         conn.close()
     else:
+        # Turso 진짜 배치 INSERT (500건씩 한 번의 HTTP 요청)
+        batch_size = 500
+        batch_statements = []
+
+        insert_sql = '''
+            INSERT INTO sales_data (
+                file_id, 분류명, 카테고리, 업체명, 상품코드, 바코드, 상품명,
+                판매일, 주문수, 주문건, 주문량, 판매단가, 최종단가, 수발주단가,
+                판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액,
+                판매량, 실판매단가, 실판매금액
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        '''
+
         for _, row in df.iterrows():
             상품코드 = row.get('상품코드')
             상품명 = str(row.get('상품명', ''))
@@ -325,14 +383,7 @@ def save_sales_data(df, file_id):
             분류명 = row.get('분류명', '')
             카테고리, 업체명 = parse_classification(분류명)
 
-            execute_write('''
-                INSERT INTO sales_data (
-                    file_id, 분류명, 카테고리, 업체명, 상품코드, 바코드, 상품명,
-                    판매일, 주문수, 주문건, 주문량, 판매단가, 최종단가, 수발주단가,
-                    판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액,
-                    판매량, 실판매단가, 실판매금액
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            params = (
                 file_id, 분류명, 카테고리, 업체명,
                 row.get('상품코드'), row.get('바코드'), row.get('상품명'),
                 clean_numeric(row.get('판매일')),
@@ -344,8 +395,18 @@ def save_sales_data(df, file_id):
                 clean_numeric(row.get('할인량')), clean_numeric(row.get('할인금액')),
                 clean_numeric(row.get('판매량')), clean_numeric(row.get('실판매단가')),
                 clean_numeric(row.get('실판매금액'))
-            ))
-            inserted += 1
+            )
+            batch_statements.append((insert_sql, params))
+
+            if len(batch_statements) >= batch_size:
+                turso_batch_execute(batch_statements)
+                inserted += len(batch_statements)
+                batch_statements = []
+
+        # 남은 데이터 처리
+        if batch_statements:
+            turso_batch_execute(batch_statements)
+            inserted += len(batch_statements)
 
     return inserted
 
@@ -399,6 +460,19 @@ def save_monthly_data(df, file_id, data_type):
         conn.commit()
         conn.close()
     else:
+        # Turso 진짜 배치 INSERT (500건씩 한 번의 HTTP 요청)
+        batch_size = 500
+        batch_statements = []
+
+        insert_sql = '''
+            INSERT INTO monthly_sales (
+                file_id, data_type, 판매일자, 매장코드, 매장명, 분류명, 카테고리, 업체명,
+                상품코드, 상품명, 판매일, 주문수, 주문건, 주문량, 판매단가, 수발주단가,
+                판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액,
+                판매량, 실판매단가, 실판매금액
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        '''
+
         for _, row in df.iterrows():
             매장명 = row.get('매장명', '')
             if pd.notna(매장명) and '매장수' in str(매장명):
@@ -416,14 +490,7 @@ def save_monthly_data(df, file_id, data_type):
             else:
                 판매일자 = None
 
-            execute_write('''
-                INSERT INTO monthly_sales (
-                    file_id, data_type, 판매일자, 매장코드, 매장명, 분류명, 카테고리, 업체명,
-                    상품코드, 상품명, 판매일, 주문수, 주문건, 주문량, 판매단가, 수발주단가,
-                    판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액,
-                    판매량, 실판매단가, 실판매금액
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            params = (
                 file_id, data_type, 판매일자,
                 row.get('매장코드'), row.get('매장명'), 분류명, 카테고리, 업체명,
                 row.get('상품코드'), row.get('상품명'),
@@ -435,8 +502,18 @@ def save_monthly_data(df, file_id, data_type):
                 clean_numeric(row.get('취소금액')), clean_numeric(row.get('할인량')),
                 clean_numeric(row.get('할인금액')), clean_numeric(row.get('판매량')),
                 clean_numeric(row.get('실판매단가')), clean_numeric(row.get('실판매금액'))
-            ))
-            inserted += 1
+            )
+            batch_statements.append((insert_sql, params))
+
+            if len(batch_statements) >= batch_size:
+                turso_batch_execute(batch_statements)
+                inserted += len(batch_statements)
+                batch_statements = []
+
+        # 남은 데이터 처리
+        if batch_statements:
+            turso_batch_execute(batch_statements)
+            inserted += len(batch_statements)
 
     return inserted
 

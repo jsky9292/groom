@@ -1015,10 +1015,43 @@
             showToast('Excel 파일 다운로드가 시작됩니다.');
         }
 
-        function saveReport() {
-            // 브라우저 다운로드 방식 - 사용자가 저장 위치 선택 가능
-            window.location.href = '/save-report';
-            showToast('리포트 다운로드가 시작됩니다.');
+        async function saveReport() {
+            try {
+                showToast('리포트 생성 중...');
+
+                // 서버에서 파일 데이터 가져오기
+                const response = await fetch('/save-report');
+                const blob = await response.blob();
+
+                // File System Access API로 저장 위치 선택 대화상자 띄우기
+                if (window.showSaveFilePicker) {
+                    const timestamp = new Date().toISOString().slice(0,19).replace(/[-:T]/g, '').slice(0,15);
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: `판매현황_종합리포트_${timestamp}.xlsx`,
+                        types: [{
+                            description: 'Excel 파일',
+                            accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+                        }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    showToast('리포트가 저장되었습니다!');
+                } else {
+                    // File System Access API 미지원 브라우저용 폴백
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `판매현황_종합리포트_${Date.now()}.xlsx`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('리포트 다운로드가 시작됩니다.');
+                }
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    showToast('리포트 저장 오류: ' + e.message, 'error');
+                }
+            }
         }
 
         async function loadAllData() {

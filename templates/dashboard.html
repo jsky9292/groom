@@ -304,13 +304,45 @@
             margin-left: 10px;
         }
 
-        @media (max-width: 768px) {
-            .container { padding: 15px; }
+        /* 모바일 최적화 */
+        @media (max-width: 992px) {
             .grid-2 { grid-template-columns: 1fr; }
-            .tabs { flex-direction: column; }
-            .tab { text-align: center; }
-            .navbar { flex-direction: column; gap: 15px; }
-            .navbar-right { justify-content: center; }
+            .summary-cards { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .tabs { flex-direction: column; gap: 5px; }
+            .tab { text-align: center; padding: 10px 15px; font-size: 13px; }
+            .navbar { flex-direction: column; gap: 10px; padding: 15px; }
+            .navbar h1 { font-size: 16px; text-align: center; }
+            .navbar-right { justify-content: center; flex-wrap: wrap; gap: 8px; }
+            .navbar-right .btn { padding: 8px 12px; font-size: 12px; }
+            .card { padding: 15px; }
+            .card-value { font-size: 20px; }
+            .card-title { font-size: 12px; }
+            .card-icon { width: 35px; height: 35px; font-size: 16px; }
+            .chart-container { padding: 15px; }
+            .chart-title { font-size: 15px; }
+            .data-table th, .data-table td { padding: 8px 10px; font-size: 12px; }
+            .table-wrapper { max-height: 400px; }
+            .toast { bottom: 10px; right: 10px; left: 10px; text-align: center; }
+        }
+
+        @media (max-width: 480px) {
+            .summary-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .card { padding: 12px; }
+            .card-value { font-size: 18px; }
+            .card-sub { font-size: 10px; }
+            .navbar h1 { font-size: 14px; }
+            .db-badge { display: none; }
+            .data-table { font-size: 11px; }
+            .data-table th, .data-table td { padding: 6px 8px; }
+            .row-category td:first-child { padding-left: 20px; }
+            .row-product td:first-child { padding-left: 35px; }
+            .cat-count { display: none; }
         }
     </style>
 </head>

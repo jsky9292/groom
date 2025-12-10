@@ -163,8 +163,14 @@ def dashboard():
 @login_required
 def upload_page():
     """파일 업로드 페이지"""
-    files = get_upload_files()
-    return render_template('upload.html', files=files)
+    try:
+        files = get_upload_files()
+        return render_template('upload.html', files=files)
+    except Exception as e:
+        import traceback
+        error_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        return f"<pre>{error_msg}</pre>", 500
 
 @app.route('/settings')
 @login_required

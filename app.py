@@ -136,16 +136,22 @@ def index():
 def login():
     error = None
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        try:
+            username = request.form.get('username')
+            password = request.form.get('password')
 
-        user = verify_admin(username, password)
-        if user:
-            session['logged_in'] = True
-            session['username'] = username
-            return redirect(url_for('dashboard'))
-        else:
-            error = '아이디 또는 비밀번호가 올바르지 않습니다.'
+            user = verify_admin(username, password)
+            if user:
+                session['logged_in'] = True
+                session['username'] = username
+                return redirect(url_for('dashboard'))
+            else:
+                error = '아이디 또는 비밀번호가 올바르지 않습니다.'
+        except Exception as e:
+            print(f"Login error: {e}")
+            import traceback
+            traceback.print_exc()
+            error = '로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
 
     return render_template('login.html', error=error)
 

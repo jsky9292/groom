@@ -968,15 +968,19 @@ def get_store_category_matrix():
 
 def verify_admin(username, password):
     """관리자 로그인 확인"""
-    if IS_LOCAL:
-        result = execute_query(
-            'SELECT * FROM admin_users WHERE username = ? AND password = ?',
-            (username, password)
-        )
-        return result[0] if result else None
-    else:
-        result = supabase_select('admin_users', '*', f'username=eq.{username}&password=eq.{password}')
-        return result[0] if result else None
+    try:
+        if IS_LOCAL:
+            result = execute_query(
+                'SELECT * FROM admin_users WHERE username = ? AND password = ?',
+                (username, password)
+            )
+            return result[0] if result else None
+        else:
+            result = supabase_select('admin_users', '*', f'username=eq.{username}&password=eq.{password}')
+            return result[0] if result else None
+    except Exception as e:
+        print(f"verify_admin error: {e}")
+        return None
 
 def change_password(username, old_password, new_password):
     """비밀번호 변경"""
@@ -1054,22 +1058,29 @@ def get_data_counts():
         }
     else:
         try:
-            # Supabase에서 카운트 조회 (head 요청으로 count 헤더 받기)
+            # Supabase에서 카운트 조회 (GET 요청 + count=exact 헤더)
             headers = get_supabase_headers()
             headers['Prefer'] = 'count=exact'
+            headers['Range'] = '0-0'  # 데이터 최소화
+
+            def parse_count(resp):
+                content_range = resp.headers.get('content-range', '*/0')
+                if '/' in content_range:
+                    return int(content_range.split('/')[-1])
+                return 0
 
             with httpx.Client(timeout=30.0) as client:
                 # sales_data count
-                resp = client.head(f"{SUPABASE_URL}/rest/v1/sales_data?select=id", headers=headers)
-                sales_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+                resp = client.get(f"{SUPABASE_URL}/rest/v1/sales_data?select=id", headers=headers)
+                sales_count = parse_count(resp)
 
                 # monthly_sales count
-                resp = client.head(f"{SUPABASE_URL}/rest/v1/monthly_sales?select=id", headers=headers)
-                monthly_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+                resp = client.get(f"{SUPABASE_URL}/rest/v1/monthly_sales?select=id", headers=headers)
+                monthly_count = parse_count(resp)
 
                 # upload_files count
-                resp = client.head(f"{SUPABASE_URL}/rest/v1/upload_files?select=id", headers=headers)
-                files_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+                resp = client.get(f"{SUPABASE_URL}/rest/v1/upload_files?select=id", headers=headers)
+                files_count = parse_count(resp)
 
             return {
                 'sales_data': sales_count,

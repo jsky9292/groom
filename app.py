@@ -14,7 +14,8 @@ from database import (
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
     get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
     get_supplier_category_matrix, get_store_category_matrix, parse_classification,
-    verify_admin, change_password, get_admin_info
+    verify_admin, change_password, get_admin_info,
+    reset_all_data, get_data_counts
 )
 
 app = Flask(__name__)
@@ -375,6 +376,26 @@ def api_delete_file():
                 os.remove(filepath)
 
         return jsonify({'success': True, 'message': '파일이 삭제되었습니다.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/reset-data', methods=['POST'])
+@login_required
+def api_reset_data():
+    """모든 판매 데이터 초기화"""
+    try:
+        reset_all_data()
+        return jsonify({'success': True, 'message': '모든 데이터가 초기화되었습니다.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/data-counts')
+@login_required
+def api_data_counts():
+    """각 테이블의 데이터 건수 조회"""
+    try:
+        counts = get_data_counts()
+        return jsonify({'success': True, **counts})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

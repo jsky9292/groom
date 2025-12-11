@@ -236,7 +236,11 @@
 
         <div class="db-info">
             <span class="icon">💾</span>
-            <span class="text">업로드된 데이터는 SQLite 데이터베이스에 저장되어 지속적으로 관리됩니다. 분류명에서 업체명과 카테고리가 자동 분류됩니다.</span>
+            <span class="text">업로드된 데이터는 Supabase에 저장됩니다. 분류명에서 업체명과 카테고리가 자동 분류됩니다.</span>
+            <div style="margin-left: auto;">
+                <span id="dataCountsDisplay" style="font-size: 12px; margin-right: 15px;">로딩중...</span>
+                <button class="btn btn-danger btn-sm" onclick="resetAllData()" style="white-space: nowrap;">🗑️ 전체 초기화</button>
+            </div>
         </div>
 
         <!-- 업로드 카드 -->
@@ -281,6 +285,22 @@
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
                 <p class="progress-text" id="progressText">업로드 중...</p>
+            </div>
+
+            <!-- 미리보기 영역 -->
+            <div id="previewArea" style="display: none; margin-top: 20px;">
+                <h4 style="margin-bottom: 15px;">📊 데이터 미리보기</h4>
+                <div id="previewStats" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;"></div>
+                <div style="max-height: 300px; overflow: auto; border: 1px solid #eee; border-radius: 8px;">
+                    <table class="data-table" id="previewTable">
+                        <thead id="previewHeader"></thead>
+                        <tbody id="previewBody"></tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button class="btn btn-primary" onclick="confirmUpload()">DB에 저장</button>
+                    <button class="btn btn-secondary" onclick="cancelPreview()" style="background: #888;">취소</button>
+                </div>
             </div>
         </div>
 
@@ -334,6 +354,47 @@
 
     <script>
         let selectedFileType = 'original';
+        let pendingData = null;  // 미리보기 후 저장 대기 중인 데이터
+        let pendingFile = null;  // 미리보기 후 저장 대기 중인 파일
+
+        // 페이지 로드 시 데이터 카운트 조회
+        document.addEventListener('DOMContentLoaded', loadDataCounts);
+
+        async function loadDataCounts() {
+            try {
+                const response = await fetch('/api/data-counts');
+                const data = await response.json();
+                if (data.success !== false) {
+                    const total = (data.sales_data || 0) + (data.monthly_sales || 0);
+                    document.getElementById('dataCountsDisplay').innerHTML =
+                        `<span style="color: #27ae60;">원본: ${(data.sales_data || 0).toLocaleString()}건</span> | ` +
+                        `<span style="color: #8e44ad;">월별: ${(data.monthly_sales || 0).toLocaleString()}건</span>`;
+                }
+            } catch (e) {
+                document.getElementById('dataCountsDisplay').textContent = '데이터 조회 실패';
+            }
+        }
+
+        async function resetAllData() {
+            if (!confirm('정말 모든 데이터를 초기화하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+            if (!confirm('마지막 확인: 모든 판매 데이터가 삭제됩니다. 계속하시겠습니까?')) return;
+
+            try {
+                const response = await fetch('/api/reset-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('모든 데이터가 초기화되었습니다.', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('초기화 실패: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showToast('초기화 중 오류가 발생했습니다.', 'error');
+            }
+        }
 
         // 파일 타입 선택
         document.querySelectorAll('.file-type-option').forEach(option => {
@@ -371,42 +432,25 @@
             if (e.target.files.length > 0) handleFile(e.target.files[0]);
         });
 
-        function handleFile(file) {
+        async function handleFile(file) {
             const ext = file.name.split('.').pop().toLowerCase();
             if (!['xls', 'xlsx', 'csv'].includes(ext)) {
                 showToast('허용되지 않는 파일 형식입니다.', 'error');
                 return;
             }
-            uploadFile(file);
-        }
 
-        // 파일을 텍스트로 읽기 (인코딩 지정)
-        function readFileAsText(file, encoding = 'utf-8') {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = () => reject(reader.error);
-                reader.readAsText(file, encoding);
-            });
-        }
-
-        async function uploadFile(file) {
+            // 파일을 파싱하여 미리보기 표시
             const progressDiv = document.getElementById('uploadProgress');
-            const progressFill = document.getElementById('progressFill');
             const progressText = document.getElementById('progressText');
-
             progressDiv.style.display = 'block';
-            progressFill.style.width = '0%';
-            progressText.textContent = '파일 읽는 중...';
+            progressText.textContent = '파일 분석 중...';
 
             try {
                 let allRows = [];
                 let sheetInfo = [];
-                const ext = file.name.split('.').pop().toLowerCase();
 
                 // 원본 데이터 (.xls 확장자지만 실제 TSV 형식) 또는 CSV는 텍스트로 파싱
                 if (selectedFileType === 'original' || ext === 'csv') {
-                    // 텍스트 파일로 읽기 (cp949 인코딩)
                     const text = await readFileAsText(file, 'euc-kr');
                     const lines = text.split('\n').filter(line => line.trim());
 
@@ -414,13 +458,12 @@
                         throw new Error('데이터가 없습니다.');
                     }
 
-                    // 탭 또는 쉼표로 구분
                     const delimiter = lines[0].includes('\t') ? '\t' : ',';
                     const headers = lines[0].split(delimiter).map(h => h.trim().replace(/"/g, ''));
 
                     for (let i = 1; i < lines.length; i++) {
                         const values = lines[i].split(delimiter).map(v => v.trim().replace(/"/g, ''));
-                        if (values.length >= headers.length - 5) { // 일부 컬럼 누락 허용
+                        if (values.length >= headers.length - 5) {
                             const row = {};
                             headers.forEach((header, idx) => {
                                 row[header] = values[idx] !== undefined ? values[idx] : null;
@@ -428,8 +471,6 @@
                             allRows.push(row);
                         }
                     }
-                    console.log('TSV/CSV 파싱 완료:', allRows.length, '행, 컬럼:', headers.slice(0, 5));
-
                 } else {
                     // 진짜 Excel 파일 (.xlsx, 월별 데이터)
                     const data = await file.arrayBuffer();
@@ -450,7 +491,208 @@
                     }
                 }
 
-                progressText.textContent = `${allRows.length}행 데이터 처리 중...`;
+                progressDiv.style.display = 'none';
+
+                // 미리보기 표시
+                showPreview(allRows, file, sheetInfo);
+
+            } catch (error) {
+                progressDiv.style.display = 'none';
+                showToast('파일 분석 오류: ' + error.message, 'error');
+            }
+        }
+
+        function showPreview(rows, file, sheetInfo = []) {
+            pendingData = { rows, sheetInfo };
+            pendingFile = file;
+
+            const previewArea = document.getElementById('previewArea');
+            const previewStats = document.getElementById('previewStats');
+            const previewHeader = document.getElementById('previewHeader');
+            const previewBody = document.getElementById('previewBody');
+
+            // 통계 생성
+            let statsHtml = `
+                <div style="background: #e3f2fd; padding: 10px 15px; border-radius: 8px;">
+                    <strong>📄 파일명:</strong> ${file.name}
+                </div>
+                <div style="background: #e8f5e9; padding: 10px 15px; border-radius: 8px;">
+                    <strong>📊 총 행수:</strong> ${rows.length.toLocaleString()}행
+                </div>
+                <div style="background: #fff3e0; padding: 10px 15px; border-radius: 8px;">
+                    <strong>📁 파일 타입:</strong> ${selectedFileType === 'original' ? '원본' : selectedFileType === 'monthly' ? '월별' : '커스텀'}
+                </div>
+            `;
+
+            // 월별 데이터의 경우 시트별 정보 표시
+            if (sheetInfo.length > 0) {
+                statsHtml += `<div style="background: #f3e5f5; padding: 10px 15px; border-radius: 8px;">
+                    <strong>📑 시트:</strong> ${sheetInfo.map(s => `${s.dataType}(${s.count.toLocaleString()}행)`).join(', ')}
+                </div>`;
+            }
+
+            // 원본 데이터의 경우 매출액 합계 계산
+            if (selectedFileType === 'original' && rows.length > 0) {
+                let totalSales = 0;
+                let totalQty = 0;
+                rows.forEach(row => {
+                    const sales = parseFloat(String(row['실판매금액'] || row['판매금액'] || 0).replace(/,/g, '')) || 0;
+                    const qty = parseFloat(String(row['판매량'] || row['수량'] || 0).replace(/,/g, '')) || 0;
+                    totalSales += sales;
+                    totalQty += qty;
+                });
+                if (totalSales > 0) {
+                    statsHtml += `<div style="background: #e1f5fe; padding: 10px 15px; border-radius: 8px;">
+                        <strong>💰 총 매출:</strong> ${(totalSales / 100000000).toFixed(2)}억원
+                    </div>`;
+                }
+                if (totalQty > 0) {
+                    statsHtml += `<div style="background: #fce4ec; padding: 10px 15px; border-radius: 8px;">
+                        <strong>📦 총 판매량:</strong> ${totalQty.toLocaleString()}개
+                    </div>`;
+                }
+            }
+
+            previewStats.innerHTML = statsHtml;
+
+            // 테이블 헤더 생성 (첫 번째 행의 키 사용)
+            if (rows.length > 0) {
+                const sampleRow = rows[0];
+                const keys = Object.keys(sampleRow).filter(k => k !== '_sheet').slice(0, 10); // 최대 10개 컬럼
+
+                previewHeader.innerHTML = '<tr>' + keys.map(k => `<th>${k}</th>`).join('') + '</tr>';
+
+                // 미리보기 데이터 (처음 20행)
+                const previewRows = rows.slice(0, 20);
+                previewBody.innerHTML = previewRows.map(row =>
+                    '<tr>' + keys.map(k => {
+                        let val = row[k];
+                        if (val === null || val === undefined) val = '';
+                        // 숫자는 포맷팅
+                        if (typeof val === 'number') {
+                            val = val.toLocaleString();
+                        }
+                        // 긴 텍스트는 자르기
+                        if (String(val).length > 30) {
+                            val = String(val).substring(0, 30) + '...';
+                        }
+                        return `<td>${val}</td>`;
+                    }).join('') + '</tr>'
+                ).join('');
+
+                if (rows.length > 20) {
+                    previewBody.innerHTML += `<tr><td colspan="${keys.length}" style="text-align: center; color: #888; font-style: italic;">... 외 ${(rows.length - 20).toLocaleString()}행 더 있음</td></tr>`;
+                }
+            }
+
+            previewArea.style.display = 'block';
+            uploadArea.style.display = 'none';
+        }
+
+        function cancelPreview() {
+            pendingData = null;
+            pendingFile = null;
+
+            document.getElementById('previewArea').style.display = 'none';
+            document.getElementById('uploadArea').style.display = 'block';
+            document.getElementById('previewStats').innerHTML = '';
+            document.getElementById('previewHeader').innerHTML = '';
+            document.getElementById('previewBody').innerHTML = '';
+
+            // 파일 입력 초기화
+            document.getElementById('fileInput').value = '';
+        }
+
+        async function confirmUpload() {
+            if (!pendingData || !pendingFile) {
+                showToast('업로드할 데이터가 없습니다.', 'error');
+                return;
+            }
+
+            // 실제 업로드 진행
+            uploadFile(pendingFile, pendingData.rows, pendingData.sheetInfo);
+        }
+
+        // 파일을 텍스트로 읽기 (인코딩 지정)
+        function readFileAsText(file, encoding = 'utf-8') {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file, encoding);
+            });
+        }
+
+        async function uploadFile(file, preloadedRows = null, preloadedSheetInfo = null) {
+            const progressDiv = document.getElementById('uploadProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            // 미리보기 영역 숨기고 업로드 영역 표시
+            document.getElementById('previewArea').style.display = 'none';
+            document.getElementById('uploadArea').style.display = 'block';
+
+            progressDiv.style.display = 'block';
+            progressFill.style.width = '0%';
+            progressText.textContent = '업로드 준비 중...';
+
+            try {
+                // 이미 파싱된 데이터가 있으면 사용, 없으면 새로 파싱
+                let allRows = preloadedRows || [];
+                let sheetInfo = preloadedSheetInfo || [];
+
+                if (!preloadedRows) {
+                    // 데이터가 없으면 파싱 (기존 로직)
+                    const ext = file.name.split('.').pop().toLowerCase();
+
+                    // 원본 데이터 (.xls 확장자지만 실제 TSV 형식) 또는 CSV는 텍스트로 파싱
+                    if (selectedFileType === 'original' || ext === 'csv') {
+                        // 텍스트 파일로 읽기 (cp949 인코딩)
+                        const text = await readFileAsText(file, 'euc-kr');
+                        const lines = text.split('\n').filter(line => line.trim());
+
+                        if (lines.length < 2) {
+                            throw new Error('데이터가 없습니다.');
+                        }
+
+                        // 탭 또는 쉼표로 구분
+                        const delimiter = lines[0].includes('\t') ? '\t' : ',';
+                        const headers = lines[0].split(delimiter).map(h => h.trim().replace(/"/g, ''));
+
+                        for (let i = 1; i < lines.length; i++) {
+                            const values = lines[i].split(delimiter).map(v => v.trim().replace(/"/g, ''));
+                            if (values.length >= headers.length - 5) { // 일부 컬럼 누락 허용
+                                const row = {};
+                                headers.forEach((header, idx) => {
+                                    row[header] = values[idx] !== undefined ? values[idx] : null;
+                                });
+                                allRows.push(row);
+                            }
+                        }
+                        console.log('TSV/CSV 파싱 완료:', allRows.length, '행, 컬럼:', headers.slice(0, 5));
+
+                    } else {
+                        // 진짜 Excel 파일 (.xlsx, 월별 데이터)
+                        const data = await file.arrayBuffer();
+                        const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
+
+                        for (const sheetName of workbook.SheetNames) {
+                            const sheet = workbook.Sheets[sheetName];
+                            const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+                            if (selectedFileType === 'monthly') {
+                                let dataType = sheetName;
+                                if (sheetName.includes('의류')) dataType = '의류';
+                                else if (sheetName.includes('신발')) dataType = '신발';
+                                else if (sheetName.includes('잡화')) dataType = '잡화';
+                                sheetInfo.push({ sheetName, dataType, startIdx: allRows.length, count: jsonData.length });
+                            }
+                            allRows = allRows.concat(jsonData.map(row => ({...row, _sheet: sheetName})));
+                        }
+                    }
+                }
+
+                progressText.textContent = `${allRows.length.toLocaleString()}행 데이터 업로드 중...`;
 
                 // 청크로 나누기 (1000건씩 - 속도 개선)
                 const CHUNK_SIZE = 1000;
@@ -537,8 +779,13 @@
                 }
 
                 progressFill.style.width = '100%';
-                progressText.textContent = `완료! ${totalInserted}행 저장됨`;
-                showToast(`파일 업로드 완료: ${totalInserted}행 저장됨`, 'success');
+                progressText.textContent = `완료! ${totalInserted.toLocaleString()}행 저장됨`;
+                showToast(`파일 업로드 완료: ${totalInserted.toLocaleString()}행 저장됨`, 'success');
+
+                // pending 데이터 초기화
+                pendingData = null;
+                pendingFile = null;
+
                 setTimeout(() => location.reload(), 1500);
 
             } catch (error) {

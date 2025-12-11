@@ -1014,6 +1014,72 @@ def get_admin_info(username):
         result = supabase_select('admin_users', 'id,username,created_at,updated_at', f'username=eq.{username}')
         return result[0] if result else None
 
+def reset_all_data():
+    """모든 판매 데이터 초기화 (admin_users 제외)"""
+    if IS_LOCAL:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM sales_data')
+        cursor.execute('DELETE FROM monthly_sales')
+        cursor.execute('DELETE FROM upload_files')
+        conn.commit()
+        conn.close()
+        return True
+    else:
+        # Supabase에서 모든 데이터 삭제 (neq.0은 id > 0인 모든 행 삭제)
+        try:
+            supabase_delete('sales_data', 'id=gt.0')
+        except:
+            pass
+        try:
+            supabase_delete('monthly_sales', 'id=gt.0')
+        except:
+            pass
+        try:
+            supabase_delete('upload_files', 'id=gt.0')
+        except:
+            pass
+        return True
+
+def get_data_counts():
+    """각 테이블의 데이터 건수 조회"""
+    if IS_LOCAL:
+        sales_data = execute_query('SELECT COUNT(*) as cnt FROM sales_data')
+        monthly_sales = execute_query('SELECT COUNT(*) as cnt FROM monthly_sales')
+        upload_files = execute_query('SELECT COUNT(*) as cnt FROM upload_files')
+        return {
+            'sales_data': sales_data[0]['cnt'] if sales_data else 0,
+            'monthly_sales': monthly_sales[0]['cnt'] if monthly_sales else 0,
+            'upload_files': upload_files[0]['cnt'] if upload_files else 0
+        }
+    else:
+        try:
+            # Supabase에서 카운트 조회 (head 요청으로 count 헤더 받기)
+            headers = get_supabase_headers()
+            headers['Prefer'] = 'count=exact'
+
+            with httpx.Client(timeout=30.0) as client:
+                # sales_data count
+                resp = client.head(f"{SUPABASE_URL}/rest/v1/sales_data?select=id", headers=headers)
+                sales_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+
+                # monthly_sales count
+                resp = client.head(f"{SUPABASE_URL}/rest/v1/monthly_sales?select=id", headers=headers)
+                monthly_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+
+                # upload_files count
+                resp = client.head(f"{SUPABASE_URL}/rest/v1/upload_files?select=id", headers=headers)
+                files_count = int(resp.headers.get('content-range', '*/0').split('/')[-1])
+
+            return {
+                'sales_data': sales_count,
+                'monthly_sales': monthly_count,
+                'upload_files': files_count
+            }
+        except Exception as e:
+            print(f"Count error: {e}")
+            return {'sales_data': 0, 'monthly_sales': 0, 'upload_files': 0}
+
 # 초기화 실행
 if __name__ == '__main__':
     init_database()

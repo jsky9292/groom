@@ -4,9 +4,9 @@ import pandas as pd
 import httpx
 import json
 
-# Supabase 환경 변수
-SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://xhjiokshzesnrmzppkwd.supabase.co')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhoamlva3NoemVzbnJtenBwa3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NDcwMjEsImV4cCI6MjA4MTAyMzAyMX0.pbmUsbrpM_91aPPIGw-trcXBLPGLZrPedcvVwcYbEHc')
+# Supabase 환경 변수 (strip으로 공백/줄바꿈 제거)
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://xhjiokshzesnrmzppkwd.supabase.co').strip()
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhoamlva3NoemVzbnJtenBwa3dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU0NDcwMjEsImV4cCI6MjA4MTAyMzAyMX0.pbmUsbrpM_91aPPIGw-trcXBLPGLZrPedcvVwcYbEHc').strip()
 
 # 로컬 SQLite 폴백 (Vercel 환경변수는 문자열 '1'로 설정됨)
 IS_LOCAL = not os.environ.get('VERCEL') and not os.environ.get('USE_SUPABASE')

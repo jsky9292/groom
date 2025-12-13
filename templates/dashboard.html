@@ -153,7 +153,7 @@
         }
 
         .tab.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
             color: white;
         }
 
@@ -352,6 +352,12 @@
 <body>
     <nav class="navbar">
         <h1>☁️ 구름환경 판매데이터 분석 <span class="db-badge">DB 연동</span></h1>
+        <div class="navbar-center" style="display: flex; align-items: center; gap: 10px;">
+            <label for="file-selector" style="color: #fff; font-size: 14px;">📁 분석 파일:</label>
+            <select id="file-selector" onchange="onFileChange()" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; min-width: 200px;">
+                <option value="">전체 데이터</option>
+            </select>
+        </div>
         <div class="navbar-right">
             <span>👤 {{ session.username }} 님</span>
             <a href="{{ url_for('upload_page') }}" class="btn btn-info">📤 데이터 업로드</a>
@@ -362,73 +368,70 @@
     </nav>
 
     <div class="container">
-        <!-- 요약 카드 -->
-        <div class="summary-cards">
+        <!-- ========== 원본 데이터 분석 영역 ========== -->
+        <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 20px;">
+            <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
+            <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
+        </div>
+
+        <!-- 원본 데이터 요약 카드 -->
+        <div class="summary-cards" style="background: #fff5f5; padding: 20px; border-radius: 0 0 15px 15px; margin-bottom: 20px;">
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">총 매출액</span>
-                    <div class="card-icon icon-blue">💰</div>
+                    <span class="card-title">원본 매출액</span>
+                    <div class="card-icon" style="background: #ffebee;">💰</div>
                 </div>
-                <div class="card-value" id="total-sales">-</div>
-                <div class="card-sub">DB 저장 데이터 기준</div>
+                <div class="card-value" id="original-sales">-</div>
+                <div class="card-sub">sales_data 기준</div>
             </div>
-
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">총 판매량</span>
-                    <div class="card-icon icon-green">📦</div>
+                    <span class="card-title">원본 판매량</span>
+                    <div class="card-icon" style="background: #ffebee;">📦</div>
                 </div>
-                <div class="card-value" id="total-qty">-</div>
-                <div class="card-sub">전체 판매 수량</div>
+                <div class="card-value" id="original-qty">-</div>
+                <div class="card-sub">원본 데이터 수량</div>
             </div>
-
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">등록 업체수</span>
-                    <div class="card-icon icon-purple">🏭</div>
+                    <div class="card-icon" style="background: #ffebee;">🏭</div>
                 </div>
                 <div class="card-value" id="supplier-count">-</div>
                 <div class="card-sub">납품업체 기준</div>
             </div>
-
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">카테고리수</span>
-                    <div class="card-icon icon-orange">📁</div>
+                    <div class="card-icon" style="background: #ffebee;">📁</div>
                 </div>
                 <div class="card-value" id="category-count">-</div>
                 <div class="card-sub">상품 분류 기준</div>
             </div>
-
             <div class="card">
                 <div class="card-header">
                     <span class="card-title">등록 상품수</span>
-                    <div class="card-icon icon-teal">🏷️</div>
+                    <div class="card-icon" style="background: #ffebee;">🏷️</div>
                 </div>
                 <div class="card-value" id="product-count">-</div>
                 <div class="card-sub">고유 상품 기준</div>
             </div>
-
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">총 데이터</span>
-                    <div class="card-icon icon-red">📊</div>
+                    <span class="card-title">원본 데이터</span>
+                    <div class="card-icon" style="background: #ffebee;">📊</div>
                 </div>
-                <div class="card-value" id="total-records">-</div>
-                <div class="card-sub">원본+월별 데이터</div>
+                <div class="card-value" id="original-records">-</div>
+                <div class="card-sub">sales_data 건수</div>
             </div>
         </div>
 
-        <!-- 탭 네비게이션 -->
-        <div class="tabs">
+        <!-- 원본 데이터 탭 -->
+        <div class="tabs" style="margin-bottom: 20px; background: #fff5f5;">
             <button class="tab active" onclick="showTab('supplier')">🏭 업체별 매출</button>
             <button class="tab" onclick="showTab('category')">📁 카테고리별</button>
             <button class="tab" onclick="showTab('products')">🏆 베스트셀러</button>
-            <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
-            <button class="tab" onclick="showTab('monthly')">📆 월별 현황</button>
-            <button class="tab" onclick="showTab('store')">🏪 매장별</button>
             <button class="tab" onclick="showTab('matrix')">📊 업체-카테고리</button>
-            <button class="tab" onclick="showTab('storeDetail')">🏬 매장별 상세</button>
         </div>
 
         <!-- 업체별 섹션 -->
@@ -643,6 +646,56 @@
             </div>
         </div>
 
+        <!-- ========== 월별 데이터 분석 영역 ========== -->
+        <div style="background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 40px;">
+            <h2 style="margin: 0; font-size: 20px;">📅 월별 데이터 분석</h2>
+            <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">일별, 월별, 매장별 현황 분석 (monthly_sales 테이블)</p>
+        </div>
+
+        <!-- 월별 데이터 요약 카드 -->
+        <div class="summary-cards" style="background: #f5f0ff; padding: 20px; border-radius: 0 0 15px 15px; margin-bottom: 20px;">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">월별 매출액</span>
+                    <div class="card-icon" style="background: #ede7f6;">💰</div>
+                </div>
+                <div class="card-value" id="monthly-total-sales">-</div>
+                <div class="card-sub">monthly_sales 기준</div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">월별 판매량</span>
+                    <div class="card-icon" style="background: #ede7f6;">📦</div>
+                </div>
+                <div class="card-value" id="monthly-total-qty">-</div>
+                <div class="card-sub">월별 데이터 수량</div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">등록 매장수</span>
+                    <div class="card-icon" style="background: #ede7f6;">🏪</div>
+                </div>
+                <div class="card-value" id="store-count">-</div>
+                <div class="card-sub">매장 기준</div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">월별 데이터</span>
+                    <div class="card-icon" style="background: #ede7f6;">📊</div>
+                </div>
+                <div class="card-value" id="monthly-records">-</div>
+                <div class="card-sub">monthly_sales 건수</div>
+            </div>
+        </div>
+
+        <!-- 월별 데이터 탭 -->
+        <div class="tabs" style="margin-bottom: 20px; background: #f5f0ff;">
+            <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
+            <button class="tab" onclick="showTab('monthly')">📆 월별 현황</button>
+            <button class="tab" onclick="showTab('store')">🏪 매장별</button>
+            <button class="tab" onclick="showTab('storeDetail')">🏬 매장별 상세</button>
+        </div>
+
         <!-- 매장별 상세 분석 섹션 -->
         <div id="storeDetail-section" class="chart-section">
             <div class="chart-container">
@@ -675,6 +728,48 @@
 
     <script>
         let charts = {};
+
+        // 파일 선택 관련 함수들
+        function getSelectedFileId() {
+            const selector = document.getElementById('file-selector');
+            return selector ? selector.value : '';
+        }
+
+        function getFileIdParam() {
+            const fileId = getSelectedFileId();
+            return fileId ? `?file_id=${fileId}` : '';
+        }
+
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const data = await response.json();
+                const selector = document.getElementById('file-selector');
+
+                // 기존 옵션 초기화 (전체 데이터 옵션은 유지)
+                selector.innerHTML = '<option value="">전체 데이터</option>';
+
+                // 파일 목록 추가 (data.files 사용)
+                if (data.success && data.files) {
+                    data.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.id;
+                        option.textContent = `${file.filename} (${file.upload_date})`;
+                        selector.appendChild(option);
+                    });
+                }
+            } catch (e) {
+                console.error('File list load error:', e);
+            }
+        }
+
+        async function onFileChange() {
+            const fileId = getSelectedFileId();
+            const fileName = document.getElementById('file-selector').selectedOptions[0].text;
+            showToast(`${fileName} 분석 중...`, 'info');
+            await loadAllData();
+            showToast(`${fileName} 분석 완료!`);
+        }
 
         function formatNumber(num) {
             if (num === null || num === undefined || isNaN(num)) return '-';
@@ -716,19 +811,26 @@
 
         async function loadSummary() {
             try {
-                const response = await fetch('/api/summary');
+                const response = await fetch('/api/summary' + getFileIdParam());
                 const data = await response.json();
 
+                // 원본 데이터 (sales_data) 요약
                 if (data.original) {
-                    document.getElementById('total-sales').textContent = formatMoneyShort(data.original.total_sales);
-                    document.getElementById('total-qty').textContent = formatNumber(data.original.total_qty) + '개';
+                    document.getElementById('original-sales').textContent = formatMoneyShort(data.original.total_sales);
+                    document.getElementById('original-qty').textContent = formatNumber(data.original.total_qty) + '개';
                     document.getElementById('product-count').textContent = formatNumber(data.original.unique_products) + '개';
                     document.getElementById('supplier-count').textContent = formatNumber(data.original.unique_suppliers) + '개';
                     document.getElementById('category-count').textContent = formatNumber(data.original.unique_categories) + '개';
+                    document.getElementById('original-records').textContent = formatNumber(data.original.total_records) + '건';
                 }
 
-                const totalRecords = (data.original?.total_records || 0) + (data.monthly?.total_records || 0);
-                document.getElementById('total-records').textContent = formatNumber(totalRecords) + '건';
+                // 월별 데이터 (monthly_sales) 요약
+                if (data.monthly) {
+                    document.getElementById('monthly-total-sales').textContent = formatMoneyShort(data.monthly.total_sales);
+                    document.getElementById('monthly-total-qty').textContent = formatNumber(data.monthly.total_qty) + '개';
+                    document.getElementById('store-count').textContent = formatNumber(data.monthly.unique_stores) + '개';
+                    document.getElementById('monthly-records').textContent = formatNumber(data.monthly.total_records) + '건';
+                }
 
             } catch (e) {
                 console.error('Summary load error:', e);
@@ -737,7 +839,7 @@
 
         async function loadSupplierData() {
             try {
-                const response = await fetch('/api/sales-by-supplier');
+                const response = await fetch('/api/sales-by-supplier' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -789,7 +891,7 @@
 
         async function loadCategoryData() {
             try {
-                const response = await fetch('/api/sales-by-category');
+                const response = await fetch('/api/sales-by-category' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -836,7 +938,7 @@
 
         async function loadProductsData() {
             try {
-                const response = await fetch('/api/top-products');
+                const response = await fetch('/api/top-products' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -864,7 +966,7 @@
 
         async function loadDailyData() {
             try {
-                const response = await fetch('/api/daily-sales');
+                const response = await fetch('/api/daily-sales' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -917,7 +1019,7 @@
 
         async function loadMonthlyData() {
             try {
-                const response = await fetch('/api/monthly-sales');
+                const response = await fetch('/api/monthly-sales' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -969,7 +1071,7 @@
 
         async function loadStoreData() {
             try {
-                const response = await fetch('/api/store-sales');
+                const response = await fetch('/api/store-sales' + getFileIdParam());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -1023,7 +1125,7 @@
 
         async function loadMatrixData() {
             try {
-                const response = await fetch('/api/supplier-category');
+                const response = await fetch('/api/supplier-category' + getFileIdParam());
                 matrixData = await response.json();
 
                 if (!matrixData || matrixData.length === 0) {
@@ -1127,7 +1229,7 @@
 
         async function loadStoreDetailData() {
             try {
-                const response = await fetch('/api/store-category');
+                const response = await fetch('/api/store-category' + getFileIdParam());
                 storeDetailData = await response.json();
 
                 if (!storeDetailData || storeDetailData.length === 0) {
@@ -1276,6 +1378,7 @@
         }
 
         async function loadAllData() {
+            await loadFiles();  // 파일 목록 먼저 로드
             await loadSummary();
             await loadSupplierData();
             await loadCategoryData();

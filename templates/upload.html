@@ -189,6 +189,7 @@
         }
         .toast.success { background: #27ae60; }
         .toast.error { background: #e74c3c; }
+        .toast.info { background: #3498db; }
 
         @keyframes slideIn {
             from { transform: translateX(100%); opacity: 0; }
@@ -237,9 +238,24 @@
         <div class="db-info">
             <span class="icon">💾</span>
             <span class="text">업로드된 데이터는 Supabase에 저장됩니다. 분류명에서 업체명과 카테고리가 자동 분류됩니다.</span>
-            <div style="margin-left: auto;">
-                <span id="dataCountsDisplay" style="font-size: 12px; margin-right: 15px;">로딩중...</span>
+            <div style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
+                <span id="dataCountsDisplay" style="font-size: 12px;">로딩중...</span>
+                <button class="btn btn-info btn-sm" onclick="createBackup()" style="white-space: nowrap;">💾 백업</button>
+                <button class="btn btn-secondary btn-sm" onclick="showBackupList()" style="white-space: nowrap; background: #8e44ad;">📂 백업 목록</button>
                 <button class="btn btn-danger btn-sm" onclick="resetAllData()" style="white-space: nowrap;">🗑️ 전체 초기화</button>
+            </div>
+        </div>
+
+        <!-- 백업 목록 모달 -->
+        <div id="backupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: white; border-radius: 15px; padding: 30px; max-width: 600px; width: 90%; max-height: 80%; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0;">📂 백업 목록</h3>
+                    <button onclick="closeBackupModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+                </div>
+                <div id="backupListContent">
+                    <p style="text-align: center; color: #888;">로딩 중...</p>
+                </div>
             </div>
         </div>
 
@@ -375,8 +391,100 @@
             }
         }
 
+        // ========== 백업 관련 함수 ==========
+        async function createBackup() {
+            if (!confirm('현재 데이터를 백업하시겠습니까?')) return;
+
+            try {
+                showToast('백업 생성 중...', 'info');
+                const response = await fetch('/api/backup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, 'success');
+                } else {
+                    showToast('백업 실패: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showToast('백업 중 오류: ' + error.message, 'error');
+            }
+        }
+
+        async function showBackupList() {
+            const modal = document.getElementById('backupModal');
+            const content = document.getElementById('backupListContent');
+            modal.style.display = 'flex';
+            content.innerHTML = '<p style="text-align: center; color: #888;">로딩 중...</p>';
+
+            try {
+                const response = await fetch('/api/backup/list');
+                const result = await response.json();
+
+                if (!result.success) {
+                    content.innerHTML = '<p style="color: #e74c3c;">목록 조회 실패: ' + result.error + '</p>';
+                    return;
+                }
+
+                const backups = result.backups || [];
+                if (backups.length === 0) {
+                    content.innerHTML = '<p style="text-align: center; color: #888;">저장된 백업이 없습니다.</p>';
+                    return;
+                }
+
+                let html = '<table class="data-table"><thead><tr><th>파일명</th><th>생성일시</th><th>크기</th><th>작업</th></tr></thead><tbody>';
+                backups.forEach(backup => {
+                    const size = (backup.size / 1024 / 1024).toFixed(2);
+                    const date = new Date(backup.created).toLocaleString('ko-KR');
+                    html += `<tr>
+                        <td>${backup.filename}</td>
+                        <td>${date}</td>
+                        <td>${size} MB</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="restoreBackup('${backup.filename}')">🔄 복원</button>
+                            <a href="/api/backup/download/${backup.filename}" class="btn btn-info btn-sm">⬇️ 다운로드</a>
+                        </td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = '<p style="color: #e74c3c;">오류: ' + error.message + '</p>';
+            }
+        }
+
+        function closeBackupModal() {
+            document.getElementById('backupModal').style.display = 'none';
+        }
+
+        async function restoreBackup(filename) {
+            if (!confirm('이 백업으로 복원하시겠습니까?\n\n⚠️ 현재 데이터가 모두 삭제됩니다!')) return;
+            if (!confirm('마지막 확인: 정말 복원하시겠습니까?')) return;
+
+            try {
+                showToast('복원 중...', 'info');
+                const response = await fetch('/api/backup/restore', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('복원 완료!', 'success');
+                    closeBackupModal();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('복원 실패: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showToast('복원 중 오류: ' + error.message, 'error');
+            }
+        }
+
+        // ========== 데이터 초기화 ==========
         async function resetAllData() {
-            if (!confirm('정말 모든 데이터를 초기화하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+            if (!confirm('정말 모든 데이터를 초기화하시겠습니까?\n\n💡 초기화 전 백업을 권장합니다!')) return;
             if (!confirm('마지막 확인: 모든 판매 데이터가 삭제됩니다. 계속하시겠습니까?')) return;
 
             try {

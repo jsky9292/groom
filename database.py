@@ -30,28 +30,67 @@ def get_supabase_headers():
     }
 
 def supabase_select(table, columns='*', filters=None, order=None, limit=None):
-    """Supabase REST API로 SELECT 쿼리"""
-    url = f"{SUPABASE_URL}/rest/v1/{table}?select={columns}"
+    """Supabase REST API로 SELECT 쿼리 - 페이지네이션으로 전체 데이터 조회"""
+    all_data = []
+    page_size = 1000  # Supabase 기본 최대값
+    offset = 0
 
-    if filters:
-        url += f"&{filters}"
-    if order:
-        url += f"&order={order}"
-    if limit:
-        url += f"&limit={limit}"
+    # limit이 지정되면 해당 수만큼만, 아니면 전체 조회
+    target_count = limit if limit else float('inf')
 
-    with httpx.Client(timeout=30.0) as client:
-        response = client.get(url, headers=get_supabase_headers())
-        response.raise_for_status()
-        return response.json()
+    with httpx.Client(timeout=60.0) as client:
+        while len(all_data) < target_count:
+            url = f"{SUPABASE_URL}/rest/v1/{table}?select={columns}"
+
+            if filters:
+                url += f"&{filters}"
+            if order:
+                url += f"&order={order}"
+
+            # 페이지네이션
+            current_limit = min(page_size, int(target_count - len(all_data))) if limit else page_size
+            url += f"&limit={current_limit}&offset={offset}"
+
+            response = client.get(url, headers=get_supabase_headers())
+            response.raise_for_status()
+            data = response.json()
+
+            if not data:  # 더 이상 데이터 없음
+                break
+
+            all_data.extend(data)
+
+            if len(data) < page_size:  # 마지막 페이지
+                break
+
+            offset += page_size
+
+    return all_data
 
 def supabase_insert(table, data):
     """Supabase REST API로 INSERT (bulk 지원)"""
     url = f"{SUPABASE_URL}/rest/v1/{table}"
 
-    with httpx.Client(timeout=60.0) as client:
+    # 대량 데이터는 배치로 분할 (500건씩)
+    if isinstance(data, list) and len(data) > 500:
+        all_results = []
+        for i in range(0, len(data), 500):
+            batch = data[i:i+500]
+            with httpx.Client(timeout=120.0) as client:
+                response = client.post(url, headers=get_supabase_headers(), json=batch)
+                if response.status_code >= 400:
+                    print(f"Supabase INSERT error: {response.status_code} - {response.text[:500]}")
+                    response.raise_for_status()
+                result = response.json()
+                if isinstance(result, list):
+                    all_results.extend(result)
+        return all_results
+
+    with httpx.Client(timeout=120.0) as client:
         response = client.post(url, headers=get_supabase_headers(), json=data)
-        response.raise_for_status()
+        if response.status_code >= 400:
+            print(f"Supabase INSERT error: {response.status_code} - {response.text[:500]}")
+            response.raise_for_status()
         return response.json()
 
 def supabase_update(table, data, filters):
@@ -519,9 +558,13 @@ def delete_file_data(file_id):
 
 # ============ 통계 조회 함수들 ============
 
-def get_summary_stats():
-    """요약 통계"""
+def get_summary_stats(file_id=None):
+    """요약 통계 (file_id로 필터링 가능)"""
     stats = {}
+
+    # 파일 필터 조건
+    file_filter = f"WHERE file_id = {file_id}" if file_id else ""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
 
     if IS_LOCAL:
         # 원본 데이터 통계
@@ -556,22 +599,14 @@ def get_summary_stats():
         ''')
         stats['by_type'] = {row['data_type']: row['cnt'] for row in result if row.get('data_type')}
     else:
-        # Supabase - RPC 함수 사용 (별도 생성 필요)
+        # Supabase - file_id 필터링 적용
         try:
-            result = supabase_rpc('get_summary_stats')
-            if result:
-                stats = result
+            if file_id:
+                sales = supabase_select('sales_data', '*', f'file_id=eq.{file_id}')
+                monthly = supabase_select('monthly_sales', '*', f'file_id=eq.{file_id}')
             else:
-                # 기본값
-                stats = {
-                    'original': {'total_records': 0, 'total_sales': 0, 'total_qty': 0, 'unique_products': 0, 'unique_suppliers': 0, 'unique_categories': 0},
-                    'monthly': {'total_records': 0, 'total_sales': 0, 'total_qty': 0, 'unique_stores': 0},
-                    'by_type': {}
-                }
-        except:
-            # RPC 없으면 직접 조회 (느리지만 동작)
-            sales = supabase_select('sales_data', '*')
-            monthly = supabase_select('monthly_sales', '*')
+                sales = supabase_select('sales_data', '*')
+                monthly = supabase_select('monthly_sales', '*')
 
             stats['original'] = {
                 'total_records': len(sales),
@@ -593,30 +628,39 @@ def get_summary_stats():
                 if dt:
                     type_counts[dt] = type_counts.get(dt, 0) + 1
             stats['by_type'] = type_counts
+        except:
+            stats = {
+                'original': {'total_records': 0, 'total_sales': 0, 'total_qty': 0, 'unique_products': 0, 'unique_suppliers': 0, 'unique_categories': 0},
+                'monthly': {'total_records': 0, 'total_sales': 0, 'total_qty': 0, 'unique_stores': 0},
+                'by_type': {}
+            }
 
     return stats
 
-def get_sales_by_supplier():
-    """업체별 매출"""
+def get_sales_by_supplier(file_id=None):
+    """업체별 매출 (file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 업체명,
                 SUM(실판매금액) as 매출액,
                 SUM(판매량) as 판매량,
                 COUNT(DISTINCT 상품코드) as 상품수
             FROM sales_data
-            WHERE 업체명 IS NOT NULL AND 업체명 != ''
+            WHERE 업체명 IS NOT NULL AND 업체명 != '' {file_filter_and}
             GROUP BY 업체명
             ORDER BY 매출액 DESC
             LIMIT 30
         ''')
     else:
         try:
-            return supabase_rpc('get_sales_by_supplier')
-        except:
-            # RPC 없으면 직접 집계
-            sales = supabase_select('sales_data', '*', '업체명=not.is.null')
+            # file_id 필터링 적용
+            if file_id:
+                sales = supabase_select('sales_data', '*', f'업체명=not.is.null&file_id=eq.{file_id}')
+            else:
+                sales = supabase_select('sales_data', '*', '업체명=not.is.null')
             agg = {}
             for r in sales:
                 supplier = r.get('업체명')
@@ -629,27 +673,33 @@ def get_sales_by_supplier():
                 agg[supplier]['상품수'].add(r.get('상품코드'))
             result = [{'업체명': k, '매출액': v['매출액'], '판매량': v['판매량'], '상품수': len(v['상품수'])} for k, v in agg.items()]
             return sorted(result, key=lambda x: x['매출액'], reverse=True)[:30]
+        except:
+            return []
 
-def get_sales_by_category():
-    """카테고리별 매출"""
+def get_sales_by_category(file_id=None):
+    """카테고리별 매출 (file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 카테고리,
                 SUM(실판매금액) as 매출액,
                 SUM(판매량) as 판매량,
                 COUNT(DISTINCT 상품코드) as 상품수
             FROM sales_data
-            WHERE 카테고리 IS NOT NULL AND 카테고리 != ''
+            WHERE 카테고리 IS NOT NULL AND 카테고리 != '' {file_filter_and}
             GROUP BY 카테고리
             ORDER BY 매출액 DESC
             LIMIT 30
         ''')
     else:
         try:
-            return supabase_rpc('get_sales_by_category')
-        except:
-            sales = supabase_select('sales_data', '*', '카테고리=not.is.null')
+            # file_id 필터링 적용
+            if file_id:
+                sales = supabase_select('sales_data', '*', f'카테고리=not.is.null&file_id=eq.{file_id}')
+            else:
+                sales = supabase_select('sales_data', '*', '카테고리=not.is.null')
             agg = {}
             for r in sales:
                 cat = r.get('카테고리')
@@ -662,11 +712,15 @@ def get_sales_by_category():
                 agg[cat]['상품수'].add(r.get('상품코드'))
             result = [{'카테고리': k, '매출액': v['매출액'], '판매량': v['판매량'], '상품수': len(v['상품수'])} for k, v in agg.items()]
             return sorted(result, key=lambda x: x['매출액'], reverse=True)[:30]
+        except:
+            return []
 
-def get_top_products():
-    """베스트셀러 상품"""
+def get_top_products(file_id=None):
+    """베스트셀러 상품 (file_id로 필터링 가능)"""
+    file_filter = f"WHERE file_id = {file_id}" if file_id else ""
+
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 상품코드,
                 상품명,
@@ -676,15 +730,18 @@ def get_top_products():
                 SUM(실판매금액) as 실판매금액,
                 SUM(판매량) as 판매량
             FROM sales_data
+            {file_filter}
             GROUP BY 상품코드, 상품명
             ORDER BY 실판매금액 DESC
             LIMIT 30
         ''')
     else:
         try:
-            return supabase_rpc('get_top_products')
-        except:
-            sales = supabase_select('sales_data', '*', limit=10000)
+            # file_id 필터링 적용 - 전체 데이터 조회 (페이지네이션으로 자동 처리)
+            if file_id:
+                sales = supabase_select('sales_data', '*', f'file_id=eq.{file_id}')
+            else:
+                sales = supabase_select('sales_data', '*')
             agg = {}
             for r in sales:
                 code = r.get('상품코드')
@@ -703,26 +760,30 @@ def get_top_products():
                 agg[code]['실판매금액'] += float(r.get('실판매금액') or 0)
                 agg[code]['판매량'] += float(r.get('판매량') or 0)
             return sorted(agg.values(), key=lambda x: x['실판매금액'], reverse=True)[:30]
+        except:
+            return []
 
-def get_daily_sales():
-    """일별 매출"""
+def get_daily_sales(file_id=None):
+    """일별 매출 (file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 판매일자,
                 SUM(실판매금액) as 실판매금액,
                 SUM(판매량) as 판매량,
                 COUNT(*) as 건수
             FROM monthly_sales
-            WHERE 판매일자 IS NOT NULL
+            WHERE 판매일자 IS NOT NULL {file_filter_and}
             GROUP BY 판매일자
             ORDER BY 판매일자
         ''')
     else:
         try:
-            return supabase_rpc('get_daily_sales')
-        except:
-            monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
+            if file_id:
+                monthly = supabase_select('monthly_sales', '*', f'판매일자=not.is.null&file_id=eq.{file_id}')
+            else:
+                monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
             agg = {}
             for r in monthly:
                 date = r.get('판매일자')
@@ -734,11 +795,14 @@ def get_daily_sales():
                 agg[date]['판매량'] += float(r.get('판매량') or 0)
                 agg[date]['건수'] += 1
             return sorted(agg.values(), key=lambda x: x['판매일자'])
+        except:
+            return []
 
-def get_monthly_sales():
-    """월별 매출 (일별 데이터를 월 단위로 집계)"""
+def get_monthly_sales(file_id=None):
+    """월별 매출 (일별 데이터를 월 단위로 집계, file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 SUBSTR(판매일자, 1, 7) as 월,
                 SUM(실판매금액) as 실판매금액,
@@ -746,15 +810,16 @@ def get_monthly_sales():
                 COUNT(*) as 건수,
                 COUNT(DISTINCT 매장명) as 매장수
             FROM monthly_sales
-            WHERE 판매일자 IS NOT NULL
+            WHERE 판매일자 IS NOT NULL {file_filter_and}
             GROUP BY SUBSTR(판매일자, 1, 7)
             ORDER BY 월
         ''')
     else:
         try:
-            return supabase_rpc('get_monthly_sales_agg')
-        except:
-            monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
+            if file_id:
+                monthly = supabase_select('monthly_sales', '*', f'판매일자=not.is.null&file_id=eq.{file_id}')
+            else:
+                monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
             agg = {}
             for r in monthly:
                 date = r.get('판매일자')
@@ -770,27 +835,31 @@ def get_monthly_sales():
                     agg[month]['매장수'].add(r.get('매장명'))
             result = [{'월': k, '실판매금액': v['실판매금액'], '판매량': v['판매량'], '건수': v['건수'], '매장수': len(v['매장수'])} for k, v in agg.items()]
             return sorted(result, key=lambda x: x['월'])
+        except:
+            return []
 
-def get_store_sales():
-    """매장별 매출"""
+def get_store_sales(file_id=None):
+    """매장별 매출 (file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
-        return execute_query('''
+        return execute_query(f'''
             SELECT
                 매장명,
                 SUM(실판매금액) as 실판매금액,
                 SUM(판매량) as 판매량,
                 COUNT(*) as 건수
             FROM monthly_sales
-            WHERE 매장명 IS NOT NULL AND 매장명 != ''
+            WHERE 매장명 IS NOT NULL AND 매장명 != '' {file_filter_and}
             GROUP BY 매장명
             ORDER BY 실판매금액 DESC
             LIMIT 30
         ''')
     else:
         try:
-            return supabase_rpc('get_store_sales')
-        except:
-            monthly = supabase_select('monthly_sales', '*', '매장명=not.is.null')
+            if file_id:
+                monthly = supabase_select('monthly_sales', '*', f'매장명=not.is.null&file_id=eq.{file_id}')
+            else:
+                monthly = supabase_select('monthly_sales', '*', '매장명=not.is.null')
             agg = {}
             for r in monthly:
                 store = r.get('매장명')
@@ -802,11 +871,14 @@ def get_store_sales():
                 agg[store]['판매량'] += float(r.get('판매량') or 0)
                 agg[store]['건수'] += 1
             return sorted(agg.values(), key=lambda x: x['실판매금액'], reverse=True)[:30]
+        except:
+            return []
 
-def get_supplier_category_matrix():
-    """업체-카테고리-상품 계층 구조 (드릴다운용)"""
+def get_supplier_category_matrix(file_id=None):
+    """업체-카테고리-상품 계층 구조 (드릴다운용, file_id로 필터링 가능)"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
-        result = execute_query('''
+        result = execute_query(f'''
             SELECT
                 업체명,
                 카테고리,
@@ -815,15 +887,16 @@ def get_supplier_category_matrix():
                 SUM(실판매금액) as 매출액,
                 SUM(판매량) as 판매량
             FROM sales_data
-            WHERE 업체명 IS NOT NULL AND 카테고리 IS NOT NULL
+            WHERE 업체명 IS NOT NULL AND 카테고리 IS NOT NULL {file_filter_and}
             GROUP BY 업체명, 카테고리, 상품코드, 상품명
             ORDER BY 매출액 DESC
         ''')
     else:
         try:
-            return supabase_rpc('get_supplier_category_matrix')
-        except:
-            sales = supabase_select('sales_data', '*', '업체명=not.is.null')
+            if file_id:
+                sales = supabase_select('sales_data', '*', f'업체명=not.is.null&file_id=eq.{file_id}')
+            else:
+                sales = supabase_select('sales_data', '*', '업체명=not.is.null')
             # 집계
             agg = {}
             for r in sales:
@@ -833,6 +906,8 @@ def get_supplier_category_matrix():
                 agg[key]['매출액'] += float(r.get('실판매금액') or 0)
                 agg[key]['판매량'] += float(r.get('판매량') or 0)
             result = list(agg.values())
+        except:
+            result = []
 
     # 계층 구조 생성
     hierarchy = {}
@@ -884,10 +959,11 @@ def get_supplier_category_matrix():
 
     return sorted_suppliers
 
-def get_store_category_matrix():
-    """매장-카테고리-상품 계층 구조 (드릴다운용) - 매장별 뭐가 많이 팔리는지 분석"""
+def get_store_category_matrix(file_id=None):
+    """매장-카테고리-상품 계층 구조 (드릴다운용, file_id로 필터링 가능) - 매장별 뭐가 많이 팔리는지 분석"""
+    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
-        result = execute_query('''
+        result = execute_query(f'''
             SELECT
                 매장명,
                 분류명,
@@ -896,15 +972,16 @@ def get_store_category_matrix():
                 SUM(실판매금액) as 매출액,
                 SUM(판매량) as 판매량
             FROM monthly_sales
-            WHERE 매장명 IS NOT NULL AND 분류명 IS NOT NULL
+            WHERE 매장명 IS NOT NULL AND 분류명 IS NOT NULL {file_filter_and}
             GROUP BY 매장명, 분류명, 상품코드, 상품명
             ORDER BY 매출액 DESC
         ''')
     else:
         try:
-            return supabase_rpc('get_store_category_matrix')
-        except:
-            monthly = supabase_select('monthly_sales', '*', '매장명=not.is.null')
+            if file_id:
+                monthly = supabase_select('monthly_sales', '*', f'매장명=not.is.null&file_id=eq.{file_id}')
+            else:
+                monthly = supabase_select('monthly_sales', '*', '매장명=not.is.null')
             agg = {}
             for r in monthly:
                 key = (r.get('매장명'), r.get('분류명'), r.get('상품코드'), r.get('상품명'))
@@ -913,6 +990,8 @@ def get_store_category_matrix():
                 agg[key]['매출액'] += float(r.get('실판매금액') or 0)
                 agg[key]['판매량'] += float(r.get('판매량') or 0)
             result = list(agg.values())
+        except:
+            result = []
 
     # 계층 구조 생성
     hierarchy = {}
@@ -1017,6 +1096,130 @@ def get_admin_info(username):
     else:
         result = supabase_select('admin_users', 'id,username,created_at,updated_at', f'username=eq.{username}')
         return result[0] if result else None
+
+def create_backup():
+    """현재 데이터를 백업 (JSON 형태로 반환)"""
+    backup_data = {
+        'created_at': datetime.now().isoformat(),
+        'sales_data': [],
+        'monthly_sales': [],
+        'upload_files': []
+    }
+
+    if IS_LOCAL:
+        backup_data['sales_data'] = execute_query('SELECT * FROM sales_data')
+        backup_data['monthly_sales'] = execute_query('SELECT * FROM monthly_sales')
+        backup_data['upload_files'] = execute_query('SELECT * FROM upload_files WHERE status = "active"')
+    else:
+        backup_data['sales_data'] = supabase_select('sales_data', '*')
+        backup_data['monthly_sales'] = supabase_select('monthly_sales', '*')
+        backup_data['upload_files'] = supabase_select('upload_files', '*', 'status=eq.active')
+
+    return backup_data
+
+def restore_backup(backup_data):
+    """백업 데이터 복원"""
+    try:
+        # 기존 데이터 삭제
+        reset_all_data()
+
+        if IS_LOCAL:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+
+            # upload_files 복원
+            for row in backup_data.get('upload_files', []):
+                cursor.execute('''
+                    INSERT INTO upload_files (id, filename, original_name, file_type, row_count, upload_date, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (row['id'], row['filename'], row.get('original_name'), row.get('file_type'),
+                      row.get('row_count', 0), row.get('upload_date'), 'active'))
+
+            # sales_data 복원
+            for row in backup_data.get('sales_data', []):
+                cursor.execute('''
+                    INSERT INTO sales_data (file_id, 분류명, 카테고리, 업체명, 상품코드, 바코드, 상품명,
+                        판매일, 주문수, 주문건, 주문량, 판매단가, 최종단가, 수발주단가,
+                        판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액, 판매량, 실판매단가, 실판매금액)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (row.get('file_id'), row.get('분류명'), row.get('카테고리'), row.get('업체명'),
+                      row.get('상품코드'), row.get('바코드'), row.get('상품명'), row.get('판매일'),
+                      row.get('주문수'), row.get('주문건'), row.get('주문량'), row.get('판매단가'),
+                      row.get('최종단가'), row.get('수발주단가'), row.get('판매가'), row.get('취소수'),
+                      row.get('취소량'), row.get('취소금액'), row.get('할인량'), row.get('할인금액'),
+                      row.get('판매량'), row.get('실판매단가'), row.get('실판매금액')))
+
+            # monthly_sales 복원
+            for row in backup_data.get('monthly_sales', []):
+                cursor.execute('''
+                    INSERT INTO monthly_sales (file_id, data_type, 판매일자, 매장코드, 매장명, 분류명, 카테고리, 업체명,
+                        상품코드, 상품명, 판매일, 주문수, 주문건, 주문량, 판매단가, 수발주단가,
+                        판매가, 취소수, 취소량, 취소금액, 할인량, 할인금액, 판매량, 실판매단가, 실판매금액)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (row.get('file_id'), row.get('data_type'), row.get('판매일자'), row.get('매장코드'),
+                      row.get('매장명'), row.get('분류명'), row.get('카테고리'), row.get('업체명'),
+                      row.get('상품코드'), row.get('상품명'), row.get('판매일'), row.get('주문수'),
+                      row.get('주문건'), row.get('주문량'), row.get('판매단가'), row.get('수발주단가'),
+                      row.get('판매가'), row.get('취소수'), row.get('취소량'), row.get('취소금액'),
+                      row.get('할인량'), row.get('할인금액'), row.get('판매량'), row.get('실판매단가'),
+                      row.get('실판매금액')))
+
+            conn.commit()
+            conn.close()
+        else:
+            # Supabase 복원 - 배치로 처리
+            if backup_data.get('upload_files'):
+                supabase_insert('upload_files', backup_data['upload_files'])
+            if backup_data.get('sales_data'):
+                supabase_insert('sales_data', backup_data['sales_data'])
+            if backup_data.get('monthly_sales'):
+                supabase_insert('monthly_sales', backup_data['monthly_sales'])
+
+        return True, "백업 복원 완료"
+    except Exception as e:
+        return False, str(e)
+
+def get_backup_list():
+    """저장된 백업 목록 조회 (로컬 파일 시스템)"""
+    backup_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+
+    backups = []
+    for filename in os.listdir(backup_dir):
+        if filename.endswith('.json'):
+            filepath = os.path.join(backup_dir, filename)
+            stat = os.stat(filepath)
+            backups.append({
+                'filename': filename,
+                'size': stat.st_size,
+                'created': datetime.fromtimestamp(stat.st_mtime).isoformat()
+            })
+
+    return sorted(backups, key=lambda x: x['created'], reverse=True)
+
+def save_backup_to_file(backup_data):
+    """백업 데이터를 파일로 저장"""
+    backup_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+
+    filename = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    filepath = os.path.join(backup_dir, filename)
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(backup_data, f, ensure_ascii=False, default=str)
+
+    return filename, filepath
+
+def load_backup_from_file(filename):
+    """파일에서 백업 데이터 로드"""
+    backup_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backups')
+    filepath = os.path.join(backup_dir, filename)
+
+    if not os.path.exists(filepath):
+        return None
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 def reset_all_data():
     """모든 판매 데이터 초기화 (admin_users 제외)"""

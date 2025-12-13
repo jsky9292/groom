@@ -15,7 +15,8 @@ from database import (
     get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
     get_supplier_category_matrix, get_store_category_matrix, parse_classification,
     verify_admin, change_password, get_admin_info,
-    reset_all_data, get_data_counts
+    reset_all_data, get_data_counts,
+    create_backup, restore_backup, get_backup_list, save_backup_to_file, load_backup_from_file
 )
 
 app = Flask(__name__)
@@ -211,59 +212,78 @@ def api_change_password():
 
 # ============ API ============
 
+@app.route('/api/files')
+@login_required
+def api_files():
+    """업로드된 파일 목록 조회"""
+    try:
+        files = get_upload_files()
+        return jsonify({'success': True, 'files': files})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/summary')
 @login_required
 def api_summary():
-    stats = get_summary_stats()
+    file_id = request.args.get('file_id', type=int)
+    stats = get_summary_stats(file_id)
     return jsonify(stats)
 
 @app.route('/api/sales-by-supplier')
 @login_required
 def api_sales_by_supplier():
-    data = get_sales_by_supplier()
+    file_id = request.args.get('file_id', type=int)
+    data = get_sales_by_supplier(file_id)
     return jsonify(data)
 
 @app.route('/api/sales-by-category')
 @login_required
 def api_sales_by_category():
-    data = get_sales_by_category()
+    file_id = request.args.get('file_id', type=int)
+    data = get_sales_by_category(file_id)
     return jsonify(data)
 
 @app.route('/api/top-products')
 @login_required
 def api_top_products():
-    data = get_top_products()
+    file_id = request.args.get('file_id', type=int)
+    data = get_top_products(file_id)
     return jsonify(data)
 
 @app.route('/api/daily-sales')
 @login_required
 def api_daily_sales():
-    data = get_daily_sales()
+    file_id = request.args.get('file_id', type=int)
+    data = get_daily_sales(file_id)
     return jsonify(data)
 
 @app.route('/api/monthly-sales')
 @login_required
 def api_monthly_sales():
-    data = get_monthly_sales()
+    file_id = request.args.get('file_id', type=int)
+    data = get_monthly_sales(file_id)
     return jsonify(data)
 
 @app.route('/api/store-sales')
 @login_required
 def api_store_sales():
-    data = get_store_sales()
+    file_id = request.args.get('file_id', type=int)
+    data = get_store_sales(file_id)
     return jsonify(data)
 
 @app.route('/api/supplier-category')
 @login_required
 def api_supplier_category():
-    data = get_supplier_category_matrix()
+    file_id = request.args.get('file_id', type=int)
+    data = get_supplier_category_matrix(file_id)
     return jsonify(data)
 
 @app.route('/api/store-category')
 @login_required
 def api_store_category():
     """매장별 상세 분석 - 매장→카테고리→상품 드릴다운"""
-    data = get_store_category_matrix()
+    file_id = request.args.get('file_id', type=int)
+    data = get_store_category_matrix(file_id)
     return jsonify(data)
 
 @app.route('/api/upload', methods=['POST'])
@@ -395,6 +415,71 @@ def api_reset_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/backup', methods=['POST'])
+@login_required
+def api_create_backup():
+    """데이터 백업 생성"""
+    try:
+        backup_data = create_backup()
+        filename, filepath = save_backup_to_file(backup_data)
+
+        counts = {
+            'sales_data': len(backup_data.get('sales_data', [])),
+            'monthly_sales': len(backup_data.get('monthly_sales', [])),
+            'upload_files': len(backup_data.get('upload_files', []))
+        }
+
+        return jsonify({
+            'success': True,
+            'filename': filename,
+            'counts': counts,
+            'message': f'백업이 생성되었습니다. (원본: {counts["sales_data"]}건, 월별: {counts["monthly_sales"]}건)'
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
+@app.route('/api/backup/list')
+@login_required
+def api_backup_list():
+    """백업 목록 조회"""
+    try:
+        backups = get_backup_list()
+        return jsonify({'success': True, 'backups': backups})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/backup/restore', methods=['POST'])
+@login_required
+def api_restore_backup():
+    """백업 복원"""
+    try:
+        filename = request.json.get('filename')
+        if not filename:
+            return jsonify({'success': False, 'error': '백업 파일명이 필요합니다.'})
+
+        backup_data = load_backup_from_file(filename)
+        if not backup_data:
+            return jsonify({'success': False, 'error': '백업 파일을 찾을 수 없습니다.'})
+
+        success, message = restore_backup(backup_data)
+        return jsonify({'success': success, 'message': message})
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
+@app.route('/api/backup/download/<filename>')
+@login_required
+def api_download_backup(filename):
+    """백업 파일 다운로드"""
+    backup_dir = os.path.join(DATA_DIR, 'backups')
+    filepath = os.path.join(backup_dir, filename)
+
+    if not os.path.exists(filepath):
+        return jsonify({'success': False, 'error': '파일을 찾을 수 없습니다.'}), 404
+
+    return send_file(filepath, as_attachment=True, download_name=filename)
+
 @app.route('/api/data-counts')
 @login_required
 def api_data_counts():
@@ -487,5 +572,5 @@ init_database()
 if __name__ == '__main__':
     print("데이터베이스 초기화 중...")
     print(f"DB 경로: {DB_PATH if 'DB_PATH' in dir() else 'N/A'}")
-    print("서버 시작: http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    print("서버 시작: http://localhost:8080")
+    app.run(debug=True, host='0.0.0.0', port=8080)

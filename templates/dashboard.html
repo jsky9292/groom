@@ -368,7 +368,18 @@
     </nav>
 
     <div class="container">
+        <!-- ========== 메인 탭 버튼 ========== -->
+        <div style="display: flex; gap: 15px; margin: 20px 0;">
+            <button id="main-tab-original" class="main-tab" onclick="switchMainTab('original')" style="flex: 1; padding: 20px; font-size: 18px; font-weight: bold; border: none; border-radius: 15px; cursor: pointer; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; box-shadow: 0 5px 15px rgba(231,76,60,0.4); transition: all 0.3s;">
+                📋 원본 데이터 분석
+            </button>
+            <button id="main-tab-monthly" class="main-tab" onclick="switchMainTab('monthly')" style="flex: 1; padding: 20px; font-size: 18px; font-weight: bold; border: none; border-radius: 15px; cursor: pointer; background: #ddd; color: #666; transition: all 0.3s;">
+                📅 월별 데이터 분석
+            </button>
+        </div>
+
         <!-- ========== 원본 데이터 분석 영역 ========== -->
+        <div id="original-analysis-section">
         <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 20px;">
             <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
@@ -645,9 +656,11 @@
                 </div>
             </div>
         </div>
+        </div><!-- END original-analysis-section -->
 
         <!-- ========== 월별 데이터 분석 영역 ========== -->
-        <div style="background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 40px;">
+        <div id="monthly-analysis-section" style="display: none;">
+        <div style="background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 20px;">
             <h2 style="margin: 0; font-size: 20px;">📅 월별 데이터 분석</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">일별, 월별, 매장별 현황 분석 (monthly_sales 테이블)</p>
         </div>
@@ -722,12 +735,41 @@
                 </div>
             </div>
         </div>
+        </div><!-- END monthly-analysis-section -->
     </div>
 
     <div class="toast" id="toast"></div>
 
     <script>
         let charts = {};
+
+        // 메인 탭 전환 함수 (원본 데이터 / 월별 데이터)
+        function switchMainTab(type) {
+            const originalSection = document.getElementById('original-analysis-section');
+            const monthlySection = document.getElementById('monthly-analysis-section');
+            const originalTab = document.getElementById('main-tab-original');
+            const monthlyTab = document.getElementById('main-tab-monthly');
+
+            if (type === 'original') {
+                originalSection.style.display = 'block';
+                monthlySection.style.display = 'none';
+                originalTab.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                originalTab.style.color = 'white';
+                originalTab.style.boxShadow = '0 5px 15px rgba(231,76,60,0.4)';
+                monthlyTab.style.background = '#ddd';
+                monthlyTab.style.color = '#666';
+                monthlyTab.style.boxShadow = 'none';
+            } else {
+                originalSection.style.display = 'none';
+                monthlySection.style.display = 'block';
+                monthlyTab.style.background = 'linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%)';
+                monthlyTab.style.color = 'white';
+                monthlyTab.style.boxShadow = '0 5px 15px rgba(142,68,173,0.4)';
+                originalTab.style.background = '#ddd';
+                originalTab.style.color = '#666';
+                originalTab.style.boxShadow = 'none';
+            }
+        }
 
         // 파일 선택 관련 함수들
         function getSelectedFileId() {

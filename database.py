@@ -302,6 +302,53 @@ def clean_numeric(value):
     except:
         return None
 
+def convert_excel_date(value):
+    """Excel 시리얼 날짜를 문자열 날짜로 변환
+    Excel은 1900-01-01을 1로 시작하는 시리얼 넘버로 날짜를 저장
+    (실제로는 1899-12-30 기준, Excel의 1900 윤년 버그 때문)
+    """
+    if pd.isna(value) or value is None:
+        return None
+
+    # 이미 문자열 형태의 날짜인 경우
+    if isinstance(value, str):
+        value = value.strip()
+        # YYYY-MM-DD 또는 YYYY/MM/DD 형식인지 확인
+        if len(value) >= 10 and (value[4] == '-' or value[4] == '/'):
+            return value[:10].replace('/', '-')
+        # 다른 문자열 형식 시도
+        try:
+            parsed = pd.to_datetime(value)
+            return parsed.strftime('%Y-%m-%d')
+        except:
+            return None
+
+    # datetime 객체인 경우
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m-%d')
+
+    # pandas Timestamp인 경우
+    if hasattr(value, 'strftime'):
+        return value.strftime('%Y-%m-%d')
+
+    # 숫자형 (Excel 시리얼 넘버) 인 경우
+    if isinstance(value, (int, float)):
+        try:
+            # Excel 시리얼 넘버 범위 체크 (1 ~ 2958465는 1900-01-01 ~ 9999-12-31)
+            # 일반적인 날짜 범위: 25569 (1970-01-01) ~ 50000 (2036년경)
+            if 1 < value < 100000:  # Excel 날짜 범위
+                # Excel 기준일: 1899-12-30 (Excel의 1900 윤년 버그 보정)
+                excel_base = datetime(1899, 12, 30)
+                result_date = excel_base + pd.Timedelta(days=int(value))
+                return result_date.strftime('%Y-%m-%d')
+            else:
+                # Unix timestamp로 시도
+                return pd.to_datetime(value, unit='s').strftime('%Y-%m-%d')
+        except:
+            return None
+
+    return None
+
 def save_upload_file(filename, original_name, file_type, row_count):
     """업로드 파일 정보 저장"""
     if IS_LOCAL:
@@ -432,14 +479,8 @@ def save_monthly_data(df, file_id, data_type):
             분류명 = row.get('분류명', '')
             카테고리, 업체명 = parse_classification(분류명)
 
-            판매일자 = row.get('판매일자')
-            if pd.notna(판매일자):
-                if isinstance(판매일자, str):
-                    판매일자 = 판매일자
-                else:
-                    판매일자 = pd.to_datetime(판매일자).strftime('%Y-%m-%d')
-            else:
-                판매일자 = None
+            # Excel 시리얼 날짜 변환 적용
+            판매일자 = convert_excel_date(row.get('판매일자'))
 
             cursor.execute('''
                 INSERT INTO monthly_sales (
@@ -478,14 +519,8 @@ def save_monthly_data(df, file_id, data_type):
             분류명 = row.get('분류명', '')
             카테고리, 업체명 = parse_classification(분류명)
 
-            판매일자 = row.get('판매일자')
-            if pd.notna(판매일자):
-                if isinstance(판매일자, str):
-                    판매일자_str = 판매일자[:10] if len(판매일자) >= 10 else 판매일자
-                else:
-                    판매일자_str = pd.to_datetime(판매일자).strftime('%Y-%m-%d')
-            else:
-                판매일자_str = None
+            # Excel 시리얼 날짜 변환 적용
+            판매일자_str = convert_excel_date(row.get('판매일자'))
 
             batch_data.append({
                 'file_id': file_id,

@@ -824,13 +824,12 @@
         }
 
         let filesData = [];  // 파일 목록 저장
-        let isLoadingFiles = false;  // 파일 로딩 중 플래그
+        let skipNextFileChange = false;  // 자동 onchange 무시 플래그
 
         async function loadFiles() {
-            if (isLoadingFiles) return;  // 중복 호출 방지
-            isLoadingFiles = true;
-
             try {
+                skipNextFileChange = true;  // 드롭다운 변경 시 onchange 무시
+
                 const response = await fetch('/api/files');
                 if (!response.ok) {
                     console.error('File list API error:', response.status);
@@ -859,7 +858,8 @@
             } catch (e) {
                 console.error('File list load error:', e);
             } finally {
-                isLoadingFiles = false;  // 로딩 완료
+                // 약간의 딜레이 후 플래그 해제 (브라우저 이벤트 처리 완료 대기)
+                setTimeout(() => { skipNextFileChange = false; }, 100);
             }
         }
 
@@ -918,7 +918,7 @@
 
         async function onFileChange() {
             // 파일 로딩 중에는 이벤트 무시 (자동 트리거 방지)
-            if (isLoadingFiles) return;
+            if (skipNextFileChange) return;
 
             const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;

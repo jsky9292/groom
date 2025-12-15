@@ -506,6 +506,24 @@ def api_data_counts():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+def flatten_supplier_category_matrix(data):
+    """업체-카테고리-상품 계층 데이터를 평탄화"""
+    flat_data = []
+    for supplier in data:
+        업체명 = supplier.get('업체명', '')
+        categories = supplier.get('categories', {})
+        for cat_name, cat_data in categories.items():
+            for product in cat_data.get('products', []):
+                flat_data.append({
+                    '업체명': 업체명,
+                    '카테고리': cat_name,
+                    '상품코드': product.get('상품코드', ''),
+                    '상품명': product.get('상품명', ''),
+                    '매출액': product.get('매출액', 0),
+                    '판매량': product.get('판매량', 0)
+                })
+    return flat_data
+
 @app.route('/export/<data_type>')
 @login_required
 def export_data(data_type):
@@ -535,9 +553,9 @@ def export_data(data_type):
         df = pd.DataFrame(data)
         filename = f'매장별_매출_{timestamp}.xlsx'
     elif data_type == 'matrix':
-        data = get_supplier_category_matrix()
+        data = flatten_supplier_category_matrix(get_supplier_category_matrix())
         df = pd.DataFrame(data)
-        filename = f'업체_카테고리_매트릭스_{timestamp}.xlsx'
+        filename = f'업체_카테고리_상품_{timestamp}.xlsx'
     elif data_type == 'monthly':
         data = get_monthly_sales()
         df = pd.DataFrame(data)
@@ -570,7 +588,7 @@ def save_report():
         pd.DataFrame(get_top_products()).to_excel(writer, sheet_name='베스트셀러', index=False)
         pd.DataFrame(get_daily_sales()).to_excel(writer, sheet_name='일별매출', index=False)
         pd.DataFrame(get_store_sales()).to_excel(writer, sheet_name='매장별', index=False)
-        pd.DataFrame(get_supplier_category_matrix()).to_excel(writer, sheet_name='업체_카테고리', index=False)
+        pd.DataFrame(flatten_supplier_category_matrix(get_supplier_category_matrix())).to_excel(writer, sheet_name='업체_카테고리_상품', index=False)
 
     output.seek(0)
 

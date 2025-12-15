@@ -21,7 +21,7 @@ from database import (
 
 app = Flask(__name__)
 app.secret_key = 'workup_dashboard_secret_key_2024'
-APP_VERSION = '2.1.0'  # 배포 버전 확인용
+APP_VERSION = '2.2.0'  # 4단계 드릴다운 버전
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB 제한
 
 # Vercel 환경 감지

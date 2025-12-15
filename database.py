@@ -316,6 +316,70 @@ def clean_numeric(value):
     except:
         return None
 
+import re
+
+def extract_base_product_code(상품명):
+    """상품명에서 기본 상품코드(옵션 제외)를 추출
+
+    예시:
+    - BJK001_[블랙-L]작업조끼 → BJK001
+    - BJK031_블랙 L 멀티베스트 → BJK031
+    - BT027_F001[BK-XL] → BT027
+    - ABC123 일반상품 → ABC123
+
+    패턴: 상품명 시작 부분의 영문+숫자 조합 코드 추출
+    """
+    if not 상품명 or pd.isna(상품명):
+        return None
+
+    상품명 = str(상품명).strip()
+
+    # 패턴 1: 언더스코어(_) 앞의 코드 추출 (예: BJK001_[블랙-L]작업조끼)
+    if '_' in 상품명:
+        base_code = 상품명.split('_')[0].strip()
+        # 영문+숫자 조합인지 확인
+        if re.match(r'^[A-Za-z0-9]+$', base_code):
+            return base_code.upper()
+
+    # 패턴 2: 시작 부분의 영문+숫자 코드 추출 (예: BJK001 작업조끼)
+    match = re.match(r'^([A-Za-z]+[0-9]+[A-Za-z0-9]*)', 상품명)
+    if match:
+        return match.group(1).upper()
+
+    # 패턴 3: 숫자로 시작하는 코드 (예: 1234ABC 상품)
+    match = re.match(r'^([0-9]+[A-Za-z]+[A-Za-z0-9]*)', 상품명)
+    if match:
+        return match.group(1).upper()
+
+    return None
+
+def get_product_display_name(상품명, base_code):
+    """상품명에서 옵션 부분만 추출 (기본코드 제외한 표시명)
+
+    예시:
+    - BJK001_[블랙-L]작업조끼 → [블랙-L]작업조끼
+    - BJK031_블랙 L 멀티베스트 → 블랙 L 멀티베스트
+    """
+    if not 상품명 or not base_code:
+        return 상품명
+
+    상품명 = str(상품명).strip()
+
+    # 언더스코어 뒤의 부분 추출
+    if '_' in 상품명:
+        parts = 상품명.split('_', 1)
+        if len(parts) > 1:
+            return parts[1].strip()
+
+    # 기본코드 뒤의 부분 추출
+    if 상품명.upper().startswith(base_code):
+        remainder = 상품명[len(base_code):].strip()
+        if remainder.startswith('_'):
+            remainder = remainder[1:].strip()
+        return remainder if remainder else 상품명
+
+    return 상품명
+
 def convert_excel_date(value):
     """Excel 시리얼 날짜를 문자열 날짜로 변환
     Excel은 1900-01-01을 1로 시작하는 시리얼 넘버로 날짜를 저장
@@ -924,7 +988,11 @@ def get_store_sales(file_id=None):
             return []
 
 def get_supplier_category_matrix(file_id=None):
-    """업체-카테고리-상품 계층 구조 (드릴다운용, file_id로 필터링 가능)"""
+    """업체-카테고리-상품그룹-옵션 4단계 계층 구조 (드릴다운용, file_id로 필터링 가능)
+
+    구조: 업체 → 카테고리 → 상품그룹(기본코드) → 옵션(개별상품)
+    예: 구름과환경 → 상의 → BJK001(작업조끼) → [블랙-L], [블랙-XL], [카키-L]...
+    """
     file_filter_and = f"AND file_id = {file_id}" if file_id else ""
     if IS_LOCAL:
         result = execute_query(f'''
@@ -958,7 +1026,7 @@ def get_supplier_category_matrix(file_id=None):
         except:
             result = []
 
-    # 계층 구조 생성
+    # 4단계 계층 구조 생성: 업체 → 카테고리 → 상품그룹 → 옵션
     hierarchy = {}
 
     for row in result:
@@ -969,6 +1037,15 @@ def get_supplier_category_matrix(file_id=None):
         매출액 = float(row['매출액'] or 0)
         판매량 = float(row['판매량'] or 0)
 
+        # 기본 상품코드 추출 (옵션 제외)
+        base_code = extract_base_product_code(상품명)
+        if not base_code:
+            base_code = 상품코드 or '기타'  # 추출 실패 시 상품코드 사용
+
+        # 옵션명 추출 (기본코드 제외한 부분)
+        option_name = get_product_display_name(상품명, base_code)
+
+        # 업체 레벨
         if 업체명 not in hierarchy:
             hierarchy[업체명] = {
                 '업체명': 업체명,
@@ -977,33 +1054,87 @@ def get_supplier_category_matrix(file_id=None):
                 'categories': {}
             }
 
+        # 카테고리 레벨
         if 카테고리 not in hierarchy[업체명]['categories']:
             hierarchy[업체명]['categories'][카테고리] = {
                 '카테고리': 카테고리,
                 'total': 0,
                 'total_qty': 0,
-                'products': []
+                'product_groups': {}  # 상품그룹 추가
             }
 
-        hierarchy[업체명]['categories'][카테고리]['products'].append({
+        # 상품그룹 레벨 (기본코드 기준)
+        if base_code not in hierarchy[업체명]['categories'][카테고리]['product_groups']:
+            hierarchy[업체명]['categories'][카테고리]['product_groups'][base_code] = {
+                '기본코드': base_code,
+                '대표상품명': '',  # 첫 번째 옵션의 상품명에서 추출
+                'total': 0,
+                'total_qty': 0,
+                'options': []  # 옵션(개별상품) 목록
+            }
+
+        # 대표상품명 설정 (첫 번째 상품의 상품명에서 공통 부분 추출)
+        group = hierarchy[업체명]['categories'][카테고리]['product_groups'][base_code]
+        if not group['대표상품명'] and 상품명:
+            # 상품명에서 옵션 부분 제거한 기본 이름 추출
+            if '_' in str(상품명):
+                parts = str(상품명).split('_')
+                if len(parts) > 1:
+                    # 마지막 부분에서 옵션 정보 제거
+                    last_part = parts[-1]
+                    # [옵션] 형태 제거
+                    if '[' in last_part and ']' in last_part:
+                        bracket_start = last_part.find('[')
+                        bracket_end = last_part.find(']')
+                        base_name = last_part[bracket_end+1:].strip() if bracket_end < len(last_part)-1 else last_part[:bracket_start].strip()
+                        if base_name:
+                            group['대표상품명'] = base_name
+                        else:
+                            group['대표상품명'] = last_part
+                    else:
+                        group['대표상품명'] = last_part
+                else:
+                    group['대표상품명'] = 상품명
+            else:
+                group['대표상품명'] = 상품명
+
+        # 옵션(개별상품) 추가
+        group['options'].append({
             '상품코드': 상품코드,
             '상품명': 상품명,
+            '옵션명': option_name,
             '매출액': 매출액,
             '판매량': 판매량
         })
+        group['total'] += 매출액
+        group['total_qty'] += 판매량
+
+        # 카테고리 합계
         hierarchy[업체명]['categories'][카테고리]['total'] += 매출액
         hierarchy[업체명]['categories'][카테고리]['total_qty'] += 판매량
+
+        # 업체 합계
         hierarchy[업체명]['total'] += 매출액
         hierarchy[업체명]['total_qty'] += 판매량
 
     # 업체 정렬 (총 매출 내림차순)
     sorted_suppliers = sorted(hierarchy.values(), key=lambda x: x['total'], reverse=True)
 
-    # 각 업체 내 카테고리와 상품 정렬
+    # 각 업체 내 카테고리, 상품그룹, 옵션 정렬
     for supplier in sorted_suppliers:
         categories_list = sorted(supplier['categories'].values(), key=lambda x: x['total'], reverse=True)
+
         for cat in categories_list:
-            cat['products'] = sorted(cat['products'], key=lambda x: x['매출액'], reverse=True)[:50]
+            # 상품그룹 정렬 및 변환
+            groups_list = sorted(cat['product_groups'].values(), key=lambda x: x['total'], reverse=True)[:50]  # 상위 50개 상품그룹
+
+            for group in groups_list:
+                # 각 그룹 내 옵션 정렬
+                group['options'] = sorted(group['options'], key=lambda x: x['매출액'], reverse=True)
+                group['option_count'] = len(group['options'])
+
+            cat['product_groups'] = groups_list
+
         supplier['categories'] = categories_list
 
     return sorted_suppliers

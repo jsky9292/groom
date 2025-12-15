@@ -232,20 +232,39 @@
         .supplier { color: #8e44ad; font-weight: 500; }
         .category { color: #e67e22; }
 
-        /* 드릴다운 테이블 스타일 */
+        /* 4단계 드릴다운 테이블 스타일 (업체 → 카테고리 → 상품그룹 → 옵션) */
         .row-supplier { background: #f8f9fa; cursor: pointer; }
         .row-supplier:hover { background: #e9ecef; }
         .row-supplier td:first-child { font-weight: 600; color: #8e44ad; }
         .row-category { background: #fff; cursor: pointer; display: none; }
         .row-category:hover { background: #fafafa; }
         .row-category td:first-child { padding-left: 30px; color: #e67e22; font-weight: 500; }
+        .row-group { background: #f0f7ff; cursor: pointer; display: none; }
+        .row-group:hover { background: #e3f2fd; }
+        .row-group td:first-child { padding-left: 55px; color: #1565c0; font-weight: 500; }
         .row-product { background: #fff; display: none; }
-        .row-product td:first-child { padding-left: 60px; color: #555; }
+        .row-product td:first-child { padding-left: 80px; color: #555; }
         .toggle-icon { margin-right: 8px; transition: transform 0.2s; display: inline-block; }
         .expanded .toggle-icon { transform: rotate(90deg); }
         .cat-count {
             background: #e0e0e0;
             color: #666;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        .group-count {
+            background: #bbdefb;
+            color: #1565c0;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        .option-count {
+            background: #c8e6c9;
+            color: #2e7d32;
             padding: 2px 8px;
             border-radius: 10px;
             font-size: 11px;
@@ -257,6 +276,14 @@
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 10px;
+            margin-right: 5px;
+        }
+        .group-badge {
+            background: #1565c0;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
             margin-right: 5px;
         }
 
@@ -344,8 +371,9 @@
             .data-table { font-size: 11px; }
             .data-table th, .data-table td { padding: 6px 8px; }
             .row-category td:first-child { padding-left: 20px; }
-            .row-product td:first-child { padding-left: 35px; }
-            .cat-count { display: none; }
+            .row-group td:first-child { padding-left: 35px; }
+            .row-product td:first-child { padding-left: 50px; }
+            .cat-count, .group-count, .option-count { display: none; }
         }
     </style>
 </head>
@@ -630,22 +658,23 @@
             </div>
         </div>
 
-        <!-- 업체-카테고리-상품 드릴다운 섹션 -->
+        <!-- 업체-카테고리-상품그룹-옵션 4단계 드릴다운 섹션 -->
         <div id="matrix-section" class="chart-section">
             <div class="chart-container">
                 <div class="chart-header">
-                    <h3 class="chart-title">📊 업체 → 카테고리 → 상품 분석</h3>
+                    <h3 class="chart-title">📊 업체 → 카테고리 → 상품그룹 → 옵션 분석</h3>
                     <button class="btn btn-primary" onclick="exportData('matrix')">📥 Excel 저장</button>
                 </div>
                 <p style="color:#666; margin-bottom:15px; font-size:13px;">
-                    💡 <strong>클릭하여 펼치기/접기:</strong> 업체 클릭 → 카테고리 보기 → 카테고리 클릭 → 상품 보기 (매출액 내림차순)
+                    💡 <strong>4단계 드릴다운:</strong> 🏭업체 → 📁카테고리 → 🏷️상품그룹(동일 상품 묶음) → 📦옵션(색상/사이즈별)
+                    <br><span style="color:#888; font-size:12px;">예: BJK001_[블랙-L]작업조끼, BJK001_[블랙-XL]작업조끼 → BJK001 상품그룹으로 통합</span>
                 </p>
                 <div class="table-wrapper" style="max-height:700px;">
                     <table class="data-table" id="matrix-table">
                         <thead>
                             <tr>
-                                <th style="width:30%">업체 / 카테고리 / 상품</th>
-                                <th style="width:25%">상품코드</th>
+                                <th style="width:35%">업체 / 카테고리 / 상품그룹 / 옵션</th>
+                                <th style="width:20%">코드</th>
                                 <th style="width:20%">매출액</th>
                                 <th style="width:15%">판매량</th>
                                 <th style="width:10%">상세</th>
@@ -1200,30 +1229,48 @@
 
                 if (supplier.categories) {
                     supplier.categories.forEach((cat, cIdx) => {
-                        const prodCount = cat.products ? cat.products.length : 0;
+                        // product_groups 사용 (4단계 구조)
+                        const groups = cat.product_groups || [];
+                        const groupCount = groups.length;
                         html += `
                             <tr class="row-category" data-supplier="${sIdx}" data-category="${cIdx}" onclick="toggleCategory(${sIdx}, ${cIdx})">
-                                <td><span class="toggle-icon">▶</span>📁 ${cat.카테고리} <span class="cat-count">${prodCount}개 상품</span></td>
+                                <td><span class="toggle-icon">▶</span>📁 ${cat.카테고리} <span class="group-count">${groupCount}개 상품그룹</span></td>
                                 <td>-</td>
                                 <td class="money">${formatMoney(cat.total)}</td>
                                 <td class="qty">${formatNumber(cat.total_qty)}개</td>
-                                <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleCategory(${sIdx}, ${cIdx})">상품보기</button></td>
+                                <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleCategory(${sIdx}, ${cIdx})">상품그룹</button></td>
                             </tr>
                         `;
 
-                        if (cat.products) {
-                            cat.products.forEach((prod, pIdx) => {
-                                html += `
-                                    <tr class="row-product" data-supplier="${sIdx}" data-category="${cIdx}">
-                                        <td><span class="product-rank">${pIdx + 1}</span>${prod.상품명}</td>
-                                        <td>${prod.상품코드}</td>
-                                        <td class="money">${formatMoney(prod.매출액)}</td>
-                                        <td class="qty">${formatNumber(prod.판매량)}개</td>
-                                        <td></td>
-                                    </tr>
-                                `;
-                            });
-                        }
+                        // 상품그룹 레벨 (3단계)
+                        groups.forEach((group, gIdx) => {
+                            const optionCount = group.option_count || (group.options ? group.options.length : 0);
+                            const displayName = group.대표상품명 || group.기본코드;
+                            html += `
+                                <tr class="row-group" data-supplier="${sIdx}" data-category="${cIdx}" data-group="${gIdx}" onclick="toggleGroup(${sIdx}, ${cIdx}, ${gIdx})">
+                                    <td><span class="toggle-icon">▶</span><span class="group-badge">${gIdx + 1}</span>🏷️ ${group.기본코드} - ${displayName} <span class="option-count">${optionCount}개 옵션</span></td>
+                                    <td>${group.기본코드}</td>
+                                    <td class="money">${formatMoney(group.total)}</td>
+                                    <td class="qty">${formatNumber(group.total_qty)}개</td>
+                                    <td><button class="btn btn-sm" style="padding:3px 8px; font-size:11px;" onclick="event.stopPropagation(); toggleGroup(${sIdx}, ${cIdx}, ${gIdx})">옵션보기</button></td>
+                                </tr>
+                            `;
+
+                            // 옵션(개별상품) 레벨 (4단계)
+                            if (group.options) {
+                                group.options.forEach((opt, oIdx) => {
+                                    html += `
+                                        <tr class="row-product" data-supplier="${sIdx}" data-category="${cIdx}" data-group="${gIdx}">
+                                            <td><span class="product-rank">${oIdx + 1}</span>📦 ${opt.옵션명 || opt.상품명}</td>
+                                            <td style="font-size:11px; color:#666;">${opt.상품코드}</td>
+                                            <td class="money">${formatMoney(opt.매출액)}</td>
+                                            <td class="qty">${formatNumber(opt.판매량)}개</td>
+                                            <td></td>
+                                        </tr>
+                                    `;
+                                });
+                            }
+                        });
                     });
                 }
             });
@@ -1234,6 +1281,7 @@
         function toggleSupplier(sIdx) {
             const supplierRow = document.querySelector(`.row-supplier[data-supplier="${sIdx}"]`);
             const categoryRows = document.querySelectorAll(`.row-category[data-supplier="${sIdx}"]`);
+            const groupRows = document.querySelectorAll(`.row-group[data-supplier="${sIdx}"]`);
             const productRows = document.querySelectorAll(`.row-product[data-supplier="${sIdx}"]`);
 
             const isExpanded = supplierRow.classList.contains('expanded');
@@ -1241,6 +1289,10 @@
             if (isExpanded) {
                 supplierRow.classList.remove('expanded');
                 categoryRows.forEach(row => {
+                    row.style.display = 'none';
+                    row.classList.remove('expanded');
+                });
+                groupRows.forEach(row => {
                     row.style.display = 'none';
                     row.classList.remove('expanded');
                 });
@@ -1253,15 +1305,35 @@
 
         function toggleCategory(sIdx, cIdx) {
             const categoryRow = document.querySelector(`.row-category[data-supplier="${sIdx}"][data-category="${cIdx}"]`);
+            const groupRows = document.querySelectorAll(`.row-group[data-supplier="${sIdx}"][data-category="${cIdx}"]`);
             const productRows = document.querySelectorAll(`.row-product[data-supplier="${sIdx}"][data-category="${cIdx}"]`);
 
             const isExpanded = categoryRow.classList.contains('expanded');
 
             if (isExpanded) {
                 categoryRow.classList.remove('expanded');
+                groupRows.forEach(row => {
+                    row.style.display = 'none';
+                    row.classList.remove('expanded');
+                });
                 productRows.forEach(row => row.style.display = 'none');
             } else {
                 categoryRow.classList.add('expanded');
+                groupRows.forEach(row => row.style.display = 'table-row');
+            }
+        }
+
+        function toggleGroup(sIdx, cIdx, gIdx) {
+            const groupRow = document.querySelector(`.row-group[data-supplier="${sIdx}"][data-category="${cIdx}"][data-group="${gIdx}"]`);
+            const productRows = document.querySelectorAll(`.row-product[data-supplier="${sIdx}"][data-category="${cIdx}"][data-group="${gIdx}"]`);
+
+            const isExpanded = groupRow.classList.contains('expanded');
+
+            if (isExpanded) {
+                groupRow.classList.remove('expanded');
+                productRows.forEach(row => row.style.display = 'none');
+            } else {
+                groupRow.classList.add('expanded');
                 productRows.forEach(row => row.style.display = 'table-row');
             }
         }

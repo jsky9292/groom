@@ -507,16 +507,22 @@ def api_data_counts():
         return jsonify({'success': False, 'error': str(e)})
 
 def flatten_supplier_category_matrix(data):
-    """업체-카테고리-상품 계층 데이터를 평탄화"""
+    """업체-카테고리-상품 계층 데이터를 평탄화
+    
+    get_supplier_category_matrix()는 categories를 리스트로 반환함
+    각 category는 {'카테고리': name, 'products': [...]} 구조
+    """
     flat_data = []
     for supplier in data:
         업체명 = supplier.get('업체명', '')
-        categories = supplier.get('categories', {})
-        for cat_name, cat_data in categories.items():
-            for product in cat_data.get('products', []):
+        categories = supplier.get('categories', [])
+        # categories는 리스트 구조
+        for cat in categories:
+            카테고리 = cat.get('카테고리', '')
+            for product in cat.get('products', []):
                 flat_data.append({
                     '업체명': 업체명,
-                    '카테고리': cat_name,
+                    '카테고리': 카테고리,
                     '상품코드': product.get('상품코드', ''),
                     '상품명': product.get('상품명', ''),
                     '매출액': product.get('매출액', 0),

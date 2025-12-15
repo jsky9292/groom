@@ -274,7 +274,11 @@ def init_database():
             print(f"Supabase 초기화 중 오류 (테이블 생성 필요할 수 있음): {e}")
 
 def parse_classification(분류명):
-    """분류명에서 카테고리와 업체명 추출"""
+    """분류명에서 카테고리와 업체명 추출
+
+    형식: "카테고리(업체명)" → 카테고리, 업체명
+    괄호 없는 경우: "분류명" → 분류명, "미지정"
+    """
     if pd.isna(분류명) or not 분류명:
         return None, None
 
@@ -289,7 +293,8 @@ def parse_classification(분류명):
             업체명 = 분류명[last_open+1:last_close].strip()
             return 카테고리, 업체명
 
-    return 분류명, None
+    # 괄호가 없는 경우: 카테고리로 분류하고 업체명은 "미지정"으로 설정
+    return 분류명, "미지정"
 
 def clean_numeric(value):
     """숫자 값 정리"""

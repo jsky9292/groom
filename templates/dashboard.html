@@ -908,7 +908,7 @@
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
             showToast(`${fileName} 분석 중...`, 'info');
             updateDataPeriodDisplay();  // 기간 표시 업데이트
-            await loadAllData();
+            await loadAllData(true);  // 파일 목록 재로드 스킵 (선택 유지)
             showToast(`${fileName} 분석 완료!`);
         }
 
@@ -1538,8 +1538,10 @@
             }, 500);
         }
 
-        async function loadAllData() {
-            await loadFiles();  // 파일 목록 먼저 로드
+        async function loadAllData(skipFileLoad = false) {
+            if (!skipFileLoad) {
+                await loadFiles();  // 파일 목록 먼저 로드
+            }
             await loadSummary();
             await loadSupplierData();
             await loadCategoryData();

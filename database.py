@@ -782,7 +782,7 @@ def get_top_products(file_id=None):
             {file_filter}
             GROUP BY 상품코드, 상품명
             ORDER BY 실판매금액 DESC
-            LIMIT 30
+            LIMIT 100
         ''')
     else:
         try:
@@ -808,7 +808,7 @@ def get_top_products(file_id=None):
                     }
                 agg[code]['실판매금액'] += float(r.get('실판매금액') or 0)
                 agg[code]['판매량'] += float(r.get('판매량') or 0)
-            return sorted(agg.values(), key=lambda x: x['실판매금액'], reverse=True)[:30]
+            return sorted(agg.values(), key=lambda x: x['실판매금액'], reverse=True)[:100]
         except:
             return []
 
@@ -1003,7 +1003,7 @@ def get_supplier_category_matrix(file_id=None):
     for supplier in sorted_suppliers:
         categories_list = sorted(supplier['categories'].values(), key=lambda x: x['total'], reverse=True)
         for cat in categories_list:
-            cat['products'] = sorted(cat['products'], key=lambda x: x['매출액'], reverse=True)[:20]
+            cat['products'] = sorted(cat['products'], key=lambda x: x['매출액'], reverse=True)[:50]
         supplier['categories'] = categories_list
 
     return sorted_suppliers

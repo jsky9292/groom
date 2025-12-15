@@ -8,7 +8,7 @@ import json
 
 # 데이터베이스 모듈 임포트
 from database import (
-    init_database, execute_write,
+    init_database, execute_write, IS_LOCAL, supabase_update, supabase_select,
     save_upload_file, save_sales_data, save_monthly_data,
     get_upload_files, delete_file_data,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
@@ -49,6 +49,22 @@ def login_required(f):
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def update_file_row_count(file_id, row_count, increment=False):
+    """파일의 row_count를 업데이트 (로컬/Supabase 환경 모두 지원)"""
+    if IS_LOCAL:
+        if increment:
+            execute_write('UPDATE upload_files SET row_count = row_count + ? WHERE id = ?', (row_count, file_id))
+        else:
+            execute_write('UPDATE upload_files SET row_count = ? WHERE id = ?', (row_count, file_id))
+    else:
+        if increment:
+            current = supabase_select('upload_files', 'row_count', f'id=eq.{file_id}')
+            current_count = current[0]['row_count'] if current else 0
+            supabase_update('upload_files', {'row_count': current_count + row_count}, f'id=eq.{file_id}')
+        else:
+            supabase_update('upload_files', {'row_count': row_count}, f'id=eq.{file_id}')
+
+
 
 def process_and_save_file(filepath, file_type, original_name, saved_name):
     """파일을 처리하고 데이터베이스에 저장"""
@@ -100,7 +116,7 @@ def process_and_save_file(filepath, file_type, original_name, saved_name):
                 total_rows += rows
 
             # row_count 업데이트
-            execute_write('UPDATE upload_files SET row_count = ? WHERE id = ?', (total_rows, file_id))
+            update_file_row_count(file_id, total_rows)
 
         elif file_type == 'custom':
             # 커스텀 데이터
@@ -366,7 +382,7 @@ def api_upload_chunk():
             inserted = save_sales_data(df, file_id)
 
         # row_count 업데이트
-        execute_write('UPDATE upload_files SET row_count = row_count + ? WHERE id = ?', (inserted, file_id))
+        update_file_row_count(file_id, inserted, increment=True)
 
         return jsonify({
             'success': True,

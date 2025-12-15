@@ -21,6 +21,7 @@ from database import (
 
 app = Flask(__name__)
 app.secret_key = 'workup_dashboard_secret_key_2024'
+APP_VERSION = '2.1.0'  # 배포 버전 확인용
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB 제한
 
 # Vercel 환경 감지
@@ -518,6 +519,15 @@ def api_data_counts():
         return jsonify({'success': True, **counts})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/version')
+def api_version():
+    """앱 버전 확인 (배포 검증용)"""
+    return jsonify({
+        'version': APP_VERSION,
+        'export_filename': '업체_카테고리_상품',
+        'features': ['admin_required', 'flatten_supplier_category', 'csv_export']
+    })
 
 def flatten_supplier_category_matrix(data):
     """업체-카테고리-상품 계층 데이터를 평탄화

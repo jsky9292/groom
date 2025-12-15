@@ -162,11 +162,12 @@ def init_database():
     """데이터베이스 초기화 - 테이블 생성"""
     if IS_LOCAL:
         queries = [
-            # 관리자 계정 테이블
+            # 관리자 계정 테이블 (role: admin/viewer)
             '''CREATE TABLE IF NOT EXISTS admin_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 password TEXT NOT NULL,
+                role TEXT DEFAULT "admin",
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )''',
@@ -258,7 +259,11 @@ def init_database():
         # 기본 관리자 계정 생성
         cursor.execute('SELECT COUNT(*) FROM admin_users WHERE username = ?', ('admin',))
         if cursor.fetchone()[0] == 0:
-            cursor.execute('INSERT INTO admin_users (username, password) VALUES (?, ?)', ('admin', 'admin123'))
+            cursor.execute('INSERT INTO admin_users (username, password, role) VALUES (?, ?, ?)', ('admin', 'admin123', 'admin'))
+        # viewer 계정 생성
+        cursor.execute('SELECT COUNT(*) FROM admin_users WHERE username = ?', ('user',))
+        if cursor.fetchone()[0] == 0:
+            cursor.execute('INSERT INTO admin_users (username, password, role) VALUES (?, ?, ?)', ('user', 'user123', 'user'))
         conn.commit()
         conn.close()
         print(f"데이터베이스 초기화 완료: {DB_PATH}")
@@ -268,7 +273,11 @@ def init_database():
         try:
             result = supabase_select('admin_users', '*', 'username=eq.admin')
             if not result:
-                supabase_insert('admin_users', {'username': 'admin', 'password': 'admin123'})
+                supabase_insert('admin_users', {'username': 'admin', 'password': 'admin123', 'role': 'admin'})
+            # viewer 계정 확인/생성
+            result = supabase_select('admin_users', '*', 'username=eq.user')
+            if not result:
+                supabase_insert('admin_users', {'username': 'user', 'password': 'user123', 'role': 'user'})
             print(f"Supabase 데이터베이스 연결 완료: {SUPABASE_URL}")
         except Exception as e:
             print(f"Supabase 초기화 중 오류 (테이블 생성 필요할 수 있음): {e}")

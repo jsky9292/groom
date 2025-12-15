@@ -47,6 +47,17 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def admin_required(f):
+    """관리자 권한 필요한 기능용 데코레이터"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login'))
+        if session.get('role') != 'admin':
+            return jsonify({'error': '관리자 권한이 필요합니다.'}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 def update_file_row_count(file_id, row_count, increment=False):
@@ -161,6 +172,7 @@ def login():
             if user:
                 session['logged_in'] = True
                 session['username'] = username
+                session['role'] = user.get('role') or ('admin' if username == 'admin' else 'viewer')  # role 컬럼 없으면 username으로 판단
                 return redirect(url_for('dashboard'))
             else:
                 error = '아이디 또는 비밀번호가 올바르지 않습니다.'
@@ -189,7 +201,8 @@ def upload_page():
     """파일 업로드 페이지"""
     try:
         files = get_upload_files()
-        return render_template('upload.html', files=files)
+        is_admin = session.get('role') == 'admin'
+        return render_template('upload.html', files=files, is_admin=is_admin)
     except Exception as e:
         import traceback
         error_msg = f"Error: {str(e)}\n{traceback.format_exc()}"
@@ -303,7 +316,7 @@ def api_store_category():
     return jsonify(data)
 
 @app.route('/api/upload', methods=['POST'])
-@login_required
+@admin_required
 def api_upload():
     """파일 업로드 API"""
     if 'file' not in request.files:
@@ -341,7 +354,7 @@ def api_upload():
     return jsonify({'success': False, 'error': '허용되지 않는 파일 형식입니다. (xls, xlsx, csv만 가능)'})
 
 @app.route('/api/upload-chunk', methods=['POST'])
-@login_required
+@admin_required
 def api_upload_chunk():
     """청크 데이터 업로드 API (브라우저에서 파싱된 JSON 데이터 수신)"""
     try:
@@ -398,7 +411,7 @@ def api_upload_chunk():
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
 
 @app.route('/api/delete-file', methods=['POST'])
-@login_required
+@admin_required
 def api_delete_file():
     """업로드된 파일 삭제"""
     file_id = request.json.get('file_id')
@@ -422,7 +435,7 @@ def api_delete_file():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/reset-data', methods=['POST'])
-@login_required
+@admin_required
 def api_reset_data():
     """모든 판매 데이터 초기화"""
     try:
@@ -432,7 +445,7 @@ def api_reset_data():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/backup', methods=['POST'])
-@login_required
+@admin_required
 def api_create_backup():
     """데이터 백업 생성"""
     try:
@@ -466,7 +479,7 @@ def api_backup_list():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/backup/restore', methods=['POST'])
-@login_required
+@admin_required
 def api_restore_backup():
     """백업 복원"""
     try:

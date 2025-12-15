@@ -409,8 +409,20 @@
         <!-- ========== 원본 데이터 분석 영역 ========== -->
         <div id="original-analysis-section">
         <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 20px;">
-            <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
-            <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
+                    <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
+                </div>
+                <div id="data-period-section" style="display: none; background: rgba(255,255,255,0.15); padding: 8px 15px; border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 13px;">📅 데이터 기간:</span>
+                        <input type="text" id="data-period-input" placeholder="예: 2024-01-01 ~ 2024-12-31"
+                            style="padding: 5px 10px; border: none; border-radius: 5px; font-size: 13px; width: 200px;">
+                        <button onclick="saveDataPeriod()" style="padding: 5px 12px; border: none; border-radius: 5px; background: #27ae60; color: white; cursor: pointer; font-size: 12px;">저장</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 원본 데이터 요약 카드 -->
@@ -811,6 +823,8 @@
             return fileId ? `?file_id=${fileId}` : '';
         }
 
+        let filesData = [];  // 파일 목록 저장
+
         async function loadFiles() {
             try {
                 const response = await fetch('/api/files');
@@ -822,6 +836,7 @@
 
                 // 파일 목록 추가 (data.files 사용)
                 if (data.success && data.files) {
+                    filesData = data.files;  // 파일 데이터 저장
                     data.files.forEach(file => {
                         const option = document.createElement('option');
                         option.value = file.id;
@@ -829,8 +844,62 @@
                         selector.appendChild(option);
                     });
                 }
+                updateDataPeriodDisplay();
             } catch (e) {
                 console.error('File list load error:', e);
+            }
+        }
+
+        function updateDataPeriodDisplay() {
+            const fileId = getSelectedFileId();
+            const periodSection = document.getElementById('data-period-section');
+            const periodInput = document.getElementById('data-period-input');
+
+            if (fileId) {
+                // 파일 선택됨 - 기간 입력 표시
+                periodSection.style.display = 'block';
+                const selectedFile = filesData.find(f => f.id == fileId);
+                if (selectedFile && selectedFile.data_period) {
+                    periodInput.value = selectedFile.data_period;
+                } else {
+                    periodInput.value = '';
+                }
+            } else {
+                // 전체 데이터 - 기간 입력 숨김
+                periodSection.style.display = 'none';
+                periodInput.value = '';
+            }
+        }
+
+        async function saveDataPeriod() {
+            const fileId = getSelectedFileId();
+            const periodInput = document.getElementById('data-period-input');
+            const dataPeriod = periodInput.value.trim();
+
+            if (!fileId) {
+                showToast('파일을 선택해주세요.', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/file-period', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_id: fileId, data_period: dataPeriod })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('데이터 기간이 저장되었습니다.');
+                    // 로컬 데이터 업데이트
+                    const file = filesData.find(f => f.id == fileId);
+                    if (file) file.data_period = dataPeriod;
+                } else {
+                    showToast(result.error || '저장 실패', 'error');
+                }
+            } catch (e) {
+                console.error('Save period error:', e);
+                showToast('저장 중 오류 발생', 'error');
             }
         }
 
@@ -838,6 +907,7 @@
             const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
             showToast(`${fileName} 분석 중...`, 'info');
+            updateDataPeriodDisplay();  // 기간 표시 업데이트
             await loadAllData();
             showToast(`${fileName} 분석 완료!`);
         }

@@ -180,7 +180,8 @@ def init_database():
                 file_type TEXT,
                 row_count INTEGER,
                 upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                status TEXT DEFAULT 'active'
+                status TEXT DEFAULT 'active',
+                data_period TEXT DEFAULT NULL
             )''',
 
             # 판매 데이터 테이블 (원본)
@@ -650,13 +651,26 @@ def get_upload_files():
     """업로드된 파일 목록 조회"""
     if IS_LOCAL:
         return execute_query('''
-            SELECT id, filename, original_name, file_type, row_count, upload_date, status
+            SELECT id, filename, original_name, file_type, row_count, upload_date, status, data_period
             FROM upload_files
             WHERE status = 'active'
             ORDER BY upload_date DESC
         ''')
     else:
         return supabase_select('upload_files', '*', 'status=eq.active', 'upload_date.desc')
+
+def update_file_period(file_id, data_period):
+    """파일의 데이터 기간 메모 업데이트"""
+    if IS_LOCAL:
+        execute_write('UPDATE upload_files SET data_period = ? WHERE id = ?', (data_period, file_id))
+        return True
+    else:
+        try:
+            supabase_update('upload_files', {'data_period': data_period}, f'id=eq.{file_id}')
+            return True
+        except Exception as e:
+            print(f"Update period error: {e}")
+            return False
 
 def delete_file_data(file_id):
     """파일 및 관련 데이터 삭제"""

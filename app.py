@@ -10,7 +10,7 @@ import json
 from database import (
     init_database, execute_write, IS_LOCAL, supabase_update, supabase_select,
     save_upload_file, save_sales_data, save_monthly_data,
-    get_upload_files, delete_file_data,
+    get_upload_files, delete_file_data, update_file_period,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
     get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
     get_supplier_category_matrix, get_store_category_matrix, parse_classification,
@@ -21,7 +21,7 @@ from database import (
 
 app = Flask(__name__)
 app.secret_key = 'workup_dashboard_secret_key_2024'
-APP_VERSION = '2.2.0'  # 4단계 드릴다운 버전
+APP_VERSION = '2.3.0'  # 데이터 기간 메모 기능 추가
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB 제한
 
 # Vercel 환경 감지
@@ -249,6 +249,26 @@ def api_files():
     try:
         files = get_upload_files()
         return jsonify({'success': True, 'files': files})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/file-period', methods=['POST'])
+@login_required
+def api_update_file_period():
+    """파일 데이터 기간 메모 업데이트"""
+    try:
+        data = request.get_json()
+        file_id = data.get('file_id')
+        data_period = data.get('data_period', '')
+
+        if not file_id:
+            return jsonify({'success': False, 'error': '파일 ID가 필요합니다.'})
+
+        success = update_file_period(file_id, data_period)
+        if success:
+            return jsonify({'success': True, 'message': '데이터 기간이 저장되었습니다.'})
+        else:
+            return jsonify({'success': False, 'error': '저장 실패'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

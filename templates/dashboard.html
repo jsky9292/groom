@@ -824,21 +824,20 @@
         }
 
         let filesData = [];  // 파일 목록 저장
+        let isLoadingFiles = false;  // 파일 로딩 중 플래그
 
         async function loadFiles() {
-            console.log('[DEBUG] loadFiles 시작');
+            if (isLoadingFiles) return;  // 중복 호출 방지
+            isLoadingFiles = true;
+
             try {
                 const response = await fetch('/api/files');
-                console.log('[DEBUG] API 응답 상태:', response.status);
                 if (!response.ok) {
                     console.error('File list API error:', response.status);
-                    showToast(`파일 목록 로드 실패 (${response.status})`, 'error');
                     return;
                 }
                 const data = await response.json();
-                console.log('[DEBUG] API 데이터:', JSON.stringify(data));
                 const selector = document.getElementById('file-selector');
-                console.log('[DEBUG] selector 요소:', selector);
 
                 // 기존 옵션 초기화 (전체 데이터 옵션은 유지)
                 selector.innerHTML = '<option value="">전체 데이터</option>';
@@ -855,17 +854,12 @@
                         option.textContent = `${displayName} (${uploadDate})`;
                         selector.appendChild(option);
                     });
-                    console.log(`파일 ${data.files.length}개 로드 완료`);
-                } else if (data.success && (!data.files || data.files.length === 0)) {
-                    console.log('업로드된 파일 없음');
-                } else if (!data.success) {
-                    console.error('API 오류:', data.error);
-                    showToast(data.error || '파일 목록 로드 실패', 'error');
                 }
                 updateDataPeriodDisplay();
             } catch (e) {
                 console.error('File list load error:', e);
-                showToast('파일 목록 로드 중 오류 발생', 'error');
+            } finally {
+                isLoadingFiles = false;  // 로딩 완료
             }
         }
 
@@ -923,6 +917,9 @@
         }
 
         async function onFileChange() {
+            // 파일 로딩 중에는 이벤트 무시 (자동 트리거 방지)
+            if (isLoadingFiles) return;
+
             const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
             showToast(`${fileName} 분석 중...`, 'info');

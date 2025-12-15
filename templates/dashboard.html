@@ -828,6 +828,11 @@
         async function loadFiles() {
             try {
                 const response = await fetch('/api/files');
+                if (!response.ok) {
+                    console.error('File list API error:', response.status);
+                    showToast(`파일 목록 로드 실패 (${response.status})`, 'error');
+                    return;
+                }
                 const data = await response.json();
                 const selector = document.getElementById('file-selector');
 
@@ -835,18 +840,28 @@
                 selector.innerHTML = '<option value="">전체 데이터</option>';
 
                 // 파일 목록 추가 (data.files 사용)
-                if (data.success && data.files) {
+                if (data.success && data.files && data.files.length > 0) {
                     filesData = data.files;  // 파일 데이터 저장
                     data.files.forEach(file => {
                         const option = document.createElement('option');
                         option.value = file.id;
-                        option.textContent = `${file.filename} (${file.upload_date})`;
+                        // original_name 우선 표시, 없으면 filename 사용
+                        const displayName = file.original_name || file.filename;
+                        const uploadDate = file.upload_date ? file.upload_date.split('T')[0] : '';
+                        option.textContent = `${displayName} (${uploadDate})`;
                         selector.appendChild(option);
                     });
+                    console.log(`파일 ${data.files.length}개 로드 완료`);
+                } else if (data.success && (!data.files || data.files.length === 0)) {
+                    console.log('업로드된 파일 없음');
+                } else if (!data.success) {
+                    console.error('API 오류:', data.error);
+                    showToast(data.error || '파일 목록 로드 실패', 'error');
                 }
                 updateDataPeriodDisplay();
             } catch (e) {
                 console.error('File list load error:', e);
+                showToast('파일 목록 로드 중 오류 발생', 'error');
             }
         }
 

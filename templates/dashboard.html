@@ -826,15 +826,19 @@
         let filesData = [];  // 파일 목록 저장
 
         async function loadFiles() {
+            console.log('[DEBUG] loadFiles 시작');
             try {
                 const response = await fetch('/api/files');
+                console.log('[DEBUG] API 응답 상태:', response.status);
                 if (!response.ok) {
                     console.error('File list API error:', response.status);
                     showToast(`파일 목록 로드 실패 (${response.status})`, 'error');
                     return;
                 }
                 const data = await response.json();
+                console.log('[DEBUG] API 데이터:', JSON.stringify(data));
                 const selector = document.getElementById('file-selector');
+                console.log('[DEBUG] selector 요소:', selector);
 
                 // 기존 옵션 초기화 (전체 데이터 옵션은 유지)
                 selector.innerHTML = '<option value="">전체 데이터</option>';

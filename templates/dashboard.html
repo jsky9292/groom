@@ -385,6 +385,7 @@
             <select id="file-selector" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; min-width: 200px;">
                 <option value="">전체 데이터</option>
             </select>
+            <button onclick="openMemoPopup()" style="padding: 6px 12px; border: none; border-radius: 4px; background: #f39c12; color: white; cursor: pointer; font-size: 13px;">📝 메모</button>
         </div>
         <div class="navbar-right">
             <span>👤 {{ session.username }} 님</span>
@@ -409,19 +410,9 @@
         <!-- ========== 원본 데이터 분석 영역 ========== -->
         <div id="original-analysis-section">
         <div style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 15px 25px; border-radius: 15px 15px 0 0; margin-top: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                <div>
-                    <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
-                    <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
-                </div>
-                <div id="data-period-section" style="display: none; background: rgba(255,255,255,0.15); padding: 8px 15px; border-radius: 8px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 13px;">📅 데이터 기간:</span>
-                        <input type="text" id="data-period-input" placeholder="예: 2024-01-01 ~ 2024-12-31"
-                            style="padding: 5px 10px; border: none; border-radius: 5px; font-size: 13px; width: 200px;">
-                        <button onclick="saveDataPeriod()" style="padding: 5px 12px; border: none; border-radius: 5px; background: #27ae60; color: white; cursor: pointer; font-size: 12px;">저장</button>
-                    </div>
-                </div>
+            <div>
+                <h2 style="margin: 0; font-size: 20px;">📋 원본 데이터 분석</h2>
+                <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 13px;">업체별, 카테고리별, 베스트셀러 분석 (sales_data 테이블)</p>
             </div>
         </div>
 
@@ -851,43 +842,30 @@
                         selector.appendChild(option);
                     });
                 }
-                updateDataPeriodDisplay();
             } catch (e) {
                 console.error('File list load error:', e);
             }
         }
 
-        function updateDataPeriodDisplay() {
+        function openMemoPopup() {
             const fileId = getSelectedFileId();
-            const periodSection = document.getElementById('data-period-section');
-            const periodInput = document.getElementById('data-period-input');
-
-            if (fileId) {
-                // 파일 선택됨 - 기간 입력 표시
-                periodSection.style.display = 'block';
-                const selectedFile = filesData.find(f => f.id == fileId);
-                if (selectedFile && selectedFile.data_period) {
-                    periodInput.value = selectedFile.data_period;
-                } else {
-                    periodInput.value = '';
-                }
-            } else {
-                // 전체 데이터 - 기간 입력 숨김
-                periodSection.style.display = 'none';
-                periodInput.value = '';
-            }
-        }
-
-        async function saveDataPeriod() {
-            const fileId = getSelectedFileId();
-            const periodInput = document.getElementById('data-period-input');
-            const dataPeriod = periodInput.value.trim();
-
             if (!fileId) {
-                showToast('파일을 선택해주세요.', 'error');
+                showToast('먼저 파일을 선택해주세요.', 'error');
                 return;
             }
 
+            const selectedFile = filesData.find(f => f.id == fileId);
+            const currentMemo = selectedFile && selectedFile.data_period ? selectedFile.data_period : '';
+            const fileName = selectedFile ? selectedFile.original_name : '선택된 파일';
+
+            const newMemo = prompt(`📅 "${fileName}" 데이터 기간 메모:\n\n예: 2024-01-01 ~ 2024-12-31`, currentMemo);
+
+            if (newMemo !== null) {
+                saveDataPeriod(fileId, newMemo);
+            }
+        }
+
+        async function saveDataPeriod(fileId, dataPeriod) {
             try {
                 const response = await fetch('/api/file-period', {
                     method: 'POST',
@@ -897,7 +875,7 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showToast('데이터 기간이 저장되었습니다.');
+                    showToast('메모가 저장되었습니다.');
                     // 로컬 데이터 업데이트
                     const file = filesData.find(f => f.id == fileId);
                     if (file) file.data_period = dataPeriod;
@@ -914,7 +892,6 @@
             const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
             showToast(`${fileName} 분석 중...`, 'info');
-            updateDataPeriodDisplay();  // 기간 표시 업데이트
             await loadAllData(true);  // 파일 목록 재로드 스킵 (선택 유지)
             showToast(`${fileName} 분석 완료!`);
         }

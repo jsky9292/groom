@@ -382,7 +382,7 @@
         <h1>☁️ 구름환경 판매데이터 분석 <span class="db-badge">DB 연동</span></h1>
         <div class="navbar-center" style="display: flex; align-items: center; gap: 10px;">
             <label for="file-selector" style="color: #fff; font-size: 14px;">📁 분석 파일:</label>
-            <select id="file-selector" onchange="onFileChange()" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; min-width: 200px;">
+            <select id="file-selector" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; min-width: 200px;">
                 <option value="">전체 데이터</option>
             </select>
         </div>
@@ -824,12 +824,9 @@
         }
 
         let filesData = [];  // 파일 목록 저장
-        let skipNextFileChange = false;  // 자동 onchange 무시 플래그
 
         async function loadFiles() {
             try {
-                skipNextFileChange = true;  // 드롭다운 변경 시 onchange 무시
-
                 const response = await fetch('/api/files');
                 if (!response.ok) {
                     console.error('File list API error:', response.status);
@@ -857,9 +854,6 @@
                 updateDataPeriodDisplay();
             } catch (e) {
                 console.error('File list load error:', e);
-            } finally {
-                // 약간의 딜레이 후 플래그 해제 (브라우저 이벤트 처리 완료 대기)
-                setTimeout(() => { skipNextFileChange = false; }, 100);
             }
         }
 
@@ -917,9 +911,6 @@
         }
 
         async function onFileChange() {
-            // 파일 로딩 중에는 이벤트 무시 (자동 트리거 방지)
-            if (skipNextFileChange) return;
-
             const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
             showToast(`${fileName} 분석 중...`, 'info');
@@ -1569,7 +1560,11 @@
             await loadStoreDetailData();
         }
 
-        document.addEventListener('DOMContentLoaded', loadAllData);
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadAllData();
+            // 모든 데이터 로드 완료 후 이벤트 리스너 등록
+            document.getElementById('file-selector').addEventListener('change', onFileChange);
+        });
     </script>
 </body>
 </html>

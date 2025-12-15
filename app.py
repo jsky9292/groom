@@ -582,13 +582,20 @@ def export_data(data_type):
     else:
         return jsonify({'error': 'Invalid data type'}), 400
 
-    # 메모리에서 Excel 파일 생성 (Vercel 서버리스 호환)
+    # 포맷 선택 (기본 xlsx, csv 지원)
+    fmt = request.args.get('format', 'xlsx')
+    
     output = BytesIO()
-    df.to_excel(output, index=False, engine='openpyxl')
+    if fmt == 'csv':
+        filename = filename.replace('.xlsx', '.csv')
+        df.to_csv(output, index=False, encoding='utf-8-sig')
+        mimetype = 'text/csv'
+    else:
+        df.to_excel(output, index=False, engine='openpyxl')
+        mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name=filename,
-                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return send_file(output, as_attachment=True, download_name=filename, mimetype=mimetype)
 
 @app.route('/save-report', methods=['POST', 'GET'])
 @login_required

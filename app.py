@@ -12,11 +12,12 @@ from database import (
     save_upload_file, save_sales_data, save_monthly_data,
     get_upload_files, delete_file_data, update_file_period,
     get_summary_stats, get_sales_by_supplier, get_sales_by_category,
-    get_top_products, get_daily_sales, get_monthly_sales, get_store_sales,
+    get_top_products, get_daily_sales, get_weekly_sales, get_monthly_sales, get_store_sales,
     get_supplier_category_matrix, get_store_category_matrix, parse_classification,
     verify_admin, change_password, get_admin_info,
     reset_all_data, get_data_counts,
-    create_backup, restore_backup, get_backup_list, save_backup_to_file, load_backup_from_file
+    create_backup, restore_backup, get_backup_list, save_backup_to_file, load_backup_from_file,
+    delete_data_by_year, get_available_years
 )
 
 app = Flask(__name__)
@@ -217,6 +218,12 @@ def settings_page():
     admin_info = get_admin_info(session.get('username'))
     return render_template('settings.html', admin_info=admin_info)
 
+@app.route('/custom-view')
+@login_required
+def custom_view_page():
+    """커스텀 데이터 뷰어 페이지"""
+    return render_template('custom_view.html')
+
 @app.route('/api/change-password', methods=['POST'])
 @login_required
 def api_change_password():
@@ -276,7 +283,9 @@ def api_update_file_period():
 @login_required
 def api_summary():
     file_id = request.args.get('file_id', type=int)
-    stats = get_summary_stats(file_id)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    stats = get_summary_stats(file_id, start_date, end_date)
     return jsonify(stats)
 
 @app.route('/api/sales-by-supplier')
@@ -304,21 +313,36 @@ def api_top_products():
 @login_required
 def api_daily_sales():
     file_id = request.args.get('file_id', type=int)
-    data = get_daily_sales(file_id)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    data = get_daily_sales(file_id, start_date, end_date)
+    return jsonify(data)
+
+@app.route('/api/weekly-sales')
+@login_required
+def api_weekly_sales():
+    file_id = request.args.get('file_id', type=int)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    data = get_weekly_sales(file_id, start_date, end_date)
     return jsonify(data)
 
 @app.route('/api/monthly-sales')
 @login_required
 def api_monthly_sales():
     file_id = request.args.get('file_id', type=int)
-    data = get_monthly_sales(file_id)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    data = get_monthly_sales(file_id, start_date, end_date)
     return jsonify(data)
 
 @app.route('/api/store-sales')
 @login_required
 def api_store_sales():
     file_id = request.args.get('file_id', type=int)
-    data = get_store_sales(file_id)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    data = get_store_sales(file_id, start_date, end_date)
     return jsonify(data)
 
 @app.route('/api/supplier-category')
@@ -465,6 +489,46 @@ def api_reset_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/delete-by-year', methods=['POST'])
+@admin_required
+def api_delete_by_year():
+    """특정 연도의 판매 데이터 삭제"""
+    try:
+        data = request.get_json()
+        year = data.get('year')
+
+        if not year:
+            return jsonify({'success': False, 'error': '연도를 지정해주세요.'})
+
+        try:
+            year = int(year)
+            if year < 2000 or year > 2100:
+                return jsonify({'success': False, 'error': '유효한 연도를 입력해주세요. (2000-2100)'})
+        except ValueError:
+            return jsonify({'success': False, 'error': '유효한 연도 형식이 아닙니다.'})
+
+        deleted_counts = delete_data_by_year(year)
+
+        return jsonify({
+            'success': True,
+            'year': year,
+            'deleted': deleted_counts,
+            'message': f'{year}년도 데이터가 삭제되었습니다. (월별 데이터: {deleted_counts["monthly_sales"]}건)'
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
+@app.route('/api/available-years')
+@login_required
+def api_available_years():
+    """데이터에 존재하는 연도 목록 조회"""
+    try:
+        years = get_available_years()
+        return jsonify({'success': True, 'years': years})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/backup', methods=['POST'])
 @admin_required
 def api_create_backup():
@@ -540,6 +604,73 @@ def api_data_counts():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/custom-data')
+@login_required
+def api_custom_data():
+    """파일의 원본 데이터 조회 (커스텀 뷰어용)"""
+    file_id = request.args.get('file_id', type=int)
+    limit = request.args.get('limit', 10000, type=int)
+
+    if not file_id:
+        return jsonify({'success': False, 'error': '파일 ID가 필요합니다.'})
+
+    try:
+        # 파일 정보 조회
+        files = get_upload_files()
+        file_info = next((f for f in files if f['id'] == file_id), None)
+
+        if not file_info:
+            return jsonify({'success': False, 'error': '파일을 찾을 수 없습니다.'})
+
+        # 파일 타입에 따라 다른 테이블에서 조회
+        if IS_LOCAL:
+            import sqlite3
+            conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'sales_data.db'))
+            conn.row_factory = sqlite3.Row
+
+            if file_info['file_type'] == 'monthly':
+                cursor = conn.execute(f'SELECT * FROM monthly_sales WHERE file_id = ? LIMIT ?', (file_id, limit))
+            else:
+                cursor = conn.execute(f'SELECT * FROM sales_data WHERE file_id = ? LIMIT ?', (file_id, limit))
+
+            rows = [dict(row) for row in cursor.fetchall()]
+            columns = list(rows[0].keys()) if rows else []
+            conn.close()
+
+            # 내부 컬럼 제외
+            exclude_cols = ['id', 'file_id', 'created_at']
+            columns = [c for c in columns if c not in exclude_cols]
+            for row in rows:
+                for col in exclude_cols:
+                    row.pop(col, None)
+
+            return jsonify({
+                'success': True,
+                'data': rows,
+                'columns': columns,
+                'total': len(rows),
+                'file_info': file_info
+            })
+        else:
+            # Supabase
+            if file_info['file_type'] == 'monthly':
+                data = supabase_select('monthly_sales', '*', f'file_id=eq.{file_id}')
+            else:
+                data = supabase_select('sales_data', '*', f'file_id=eq.{file_id}')
+
+            columns = list(data[0].keys()) if data else []
+            return jsonify({
+                'success': True,
+                'data': data[:limit],
+                'columns': columns,
+                'total': len(data),
+                'file_info': file_info
+            })
+
+    except Exception as e:
+        import traceback
+        return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
 @app.route('/api/version')
 def api_version():
     """앱 버전 확인 (배포 검증용)"""
@@ -597,6 +728,10 @@ def export_data(data_type):
         data = get_daily_sales()
         df = pd.DataFrame(data)
         filename = f'일별매출_{timestamp}.xlsx'
+    elif data_type == 'weekly':
+        data = get_weekly_sales()
+        df = pd.DataFrame(data)
+        filename = f'주간별매출_{timestamp}.xlsx'
     elif data_type == 'store':
         data = get_store_sales()
         df = pd.DataFrame(data)

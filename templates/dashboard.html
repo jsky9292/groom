@@ -380,16 +380,23 @@
 <body>
     <nav class="navbar">
         <h1>☁️ 구름환경 판매데이터 분석 <span class="db-badge">DB 연동</span></h1>
-        <div class="navbar-center" style="display: flex; align-items: center; gap: 10px;">
+        <div class="navbar-center" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <label for="file-selector" style="color: #fff; font-size: 14px;">📁 분석 파일:</label>
             <select id="file-selector" style="padding: 6px 12px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; min-width: 200px;">
                 <option value="">전체 데이터</option>
             </select>
             <button onclick="openMemoPopup()" style="padding: 6px 12px; border: none; border-radius: 4px; background: #f39c12; color: white; cursor: pointer; font-size: 13px;">📝 메모</button>
+            <span style="color: #fff; margin-left: 10px;">📅 기간:</span>
+            <input type="date" id="start-date" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px;" title="시작일">
+            <span style="color: #fff;">~</span>
+            <input type="date" id="end-date" style="padding: 5px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px;" title="종료일">
+            <button onclick="applyDateFilter()" style="padding: 6px 12px; border: none; border-radius: 4px; background: #3498db; color: white; cursor: pointer; font-size: 13px;">🔍 조회</button>
+            <button onclick="clearDateFilter()" style="padding: 6px 12px; border: none; border-radius: 4px; background: #95a5a6; color: white; cursor: pointer; font-size: 13px;">↺ 초기화</button>
         </div>
         <div class="navbar-right">
             <span>👤 {{ session.username }} 님</span>
             <a href="{{ url_for('upload_page') }}" class="btn btn-info">📤 데이터 업로드</a>
+            <a href="{{ url_for('custom_view_page') }}" class="btn" style="background:#9b59b6; color:white;">📊 커스텀 뷰어</a>
             <button class="btn btn-primary" onclick="saveReport()">📁 리포트 저장</button>
             <a href="{{ url_for('settings_page') }}" class="btn btn-secondary">⚙️ 설정</a>
             <a href="{{ url_for('logout') }}" class="btn btn-danger">로그아웃</a>
@@ -598,6 +605,42 @@
             </div>
         </div>
 
+        <!-- 주간별 현황 섹션 -->
+        <div id="weekly-section" class="chart-section">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">📊 주간별 매출 추이</h3>
+                    <button class="btn btn-primary" onclick="exportData('weekly')">📥 Excel 저장</button>
+                </div>
+                <p style="color:#666; margin-bottom:15px; font-size:13px;">
+                    💡 <strong>주간별 현황:</strong> 업로드된 데이터의 날짜를 기준으로 주(Week) 단위로 자동 집계됩니다.
+                    <br><span style="color:#888; font-size:12px;">날짜 범위를 지정하면 해당 기간의 주간별 데이터만 조회됩니다.</span>
+                </p>
+                <canvas id="weeklyChart" height="150"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">주간별 상세 데이터</h3>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="weekly-table">
+                        <thead>
+                            <tr>
+                                <th>주차</th>
+                                <th>기간</th>
+                                <th>매출액</th>
+                                <th>판매량</th>
+                                <th>건수</th>
+                                <th>매장수</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- 월별 현황 섹션 -->
         <div id="monthly-section" class="chart-section">
             <div class="chart-container">
@@ -736,6 +779,7 @@
         <!-- 월별 데이터 탭 -->
         <div class="tabs" style="margin-bottom: 20px; background: #f5f0ff;">
             <button class="tab" onclick="showTab('daily')">📅 일별 현황</button>
+            <button class="tab" onclick="showTab('weekly')">📊 주간별 현황</button>
             <button class="tab" onclick="showTab('monthly')">📆 월별 현황</button>
             <button class="tab" onclick="showTab('store')">🏪 매장별</button>
             <button class="tab" onclick="showTab('storeDetail')">🏬 매장별 상세</button>
@@ -812,6 +856,49 @@
         function getFileIdParam() {
             const fileId = getSelectedFileId();
             return fileId ? `?file_id=${fileId}` : '';
+        }
+
+        // 날짜 필터 관련 함수들
+        function getStartDate() {
+            return document.getElementById('start-date').value || '';
+        }
+
+        function getEndDate() {
+            return document.getElementById('end-date').value || '';
+        }
+
+        function getFilterParams() {
+            const params = new URLSearchParams();
+            const fileId = getSelectedFileId();
+            const startDate = getStartDate();
+            const endDate = getEndDate();
+
+            if (fileId) params.append('file_id', fileId);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+
+            return params.toString() ? '?' + params.toString() : '';
+        }
+
+        function applyDateFilter() {
+            const startDate = getStartDate();
+            const endDate = getEndDate();
+
+            if (startDate && endDate && startDate > endDate) {
+                showToast('시작일이 종료일보다 늦을 수 없습니다.', 'error');
+                return;
+            }
+
+            showToast('날짜 범위로 데이터 조회 중...', 'info');
+            loadAllData(true);  // 데이터 새로고침
+            showToast('날짜 범위 필터 적용 완료!');
+        }
+
+        function clearDateFilter() {
+            document.getElementById('start-date').value = '';
+            document.getElementById('end-date').value = '';
+            showToast('날짜 필터 초기화됨');
+            loadAllData(true);
         }
 
         let filesData = [];  // 파일 목록 저장
@@ -936,7 +1023,7 @@
 
         async function loadSummary() {
             try {
-                const response = await fetch('/api/summary' + getFileIdParam());
+                const response = await fetch('/api/summary' + getFilterParams());
                 const data = await response.json();
 
                 // 원본 데이터 (sales_data) 요약
@@ -1091,7 +1178,7 @@
 
         async function loadDailyData() {
             try {
-                const response = await fetch('/api/daily-sales' + getFileIdParam());
+                const response = await fetch('/api/daily-sales' + getFilterParams());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -1142,9 +1229,62 @@
             }
         }
 
+        async function loadWeeklyData() {
+            try {
+                const response = await fetch('/api/weekly-sales' + getFilterParams());
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    document.querySelector('#weekly-table tbody').innerHTML =
+                        '<tr><td colspan="6" style="text-align:center; color:#888; padding:30px;">주간별 데이터가 없습니다. 월별 데이터를 업로드해주세요.</td></tr>';
+                    return;
+                }
+
+                const tbody = document.querySelector('#weekly-table tbody');
+                tbody.innerHTML = data.map(item => `
+                    <tr>
+                        <td><strong>${item.주차}</strong></td>
+                        <td style="font-size:12px; color:#666;">${item.시작일} ~ ${item.종료일}</td>
+                        <td class="money">${formatMoney(item.실판매금액)}</td>
+                        <td class="qty">${formatNumber(item.판매량)}개</td>
+                        <td>${formatNumber(item.건수)}건</td>
+                        <td>${formatNumber(item.매장수)}개</td>
+                    </tr>
+                `).join('');
+
+                if (charts.weekly) charts.weekly.destroy();
+
+                const ctx = document.getElementById('weeklyChart').getContext('2d');
+                charts.weekly = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => d.주차),
+                        datasets: [{
+                            label: '매출액',
+                            data: data.map(d => d.실판매금액),
+                            backgroundColor: 'rgba(155, 89, 182, 0.8)',
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: { callback: v => (v / 1000000).toFixed(0) + 'M' }
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error('Weekly data error:', e);
+            }
+        }
+
         async function loadMonthlyData() {
             try {
-                const response = await fetch('/api/monthly-sales' + getFileIdParam());
+                const response = await fetch('/api/monthly-sales' + getFilterParams());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -1196,7 +1336,7 @@
 
         async function loadStoreData() {
             try {
-                const response = await fetch('/api/store-sales' + getFileIdParam());
+                const response = await fetch('/api/store-sales' + getFilterParams());
                 const data = await response.json();
 
                 if (data.length === 0) {
@@ -1531,6 +1671,7 @@
             await loadCategoryData();
             await loadProductsData();
             await loadDailyData();
+            await loadWeeklyData();
             await loadMonthlyData();
             await loadStoreData();
             await loadMatrixData();

@@ -243,6 +243,7 @@
 {% if is_admin %}
                 <button class="btn btn-info btn-sm" onclick="createBackup()" style="white-space: nowrap;">💾 백업</button>
                 <button class="btn btn-secondary btn-sm" onclick="showBackupList()" style="white-space: nowrap; background: #8e44ad;">📂 백업 목록</button>
+                <button class="btn btn-sm" onclick="showYearDeleteModal()" style="white-space: nowrap; background: #e67e22; color: white;">📅 연도별 삭제</button>
                 <button class="btn btn-danger btn-sm" onclick="resetAllData()" style="white-space: nowrap;">🗑️ 전체 초기화</button>
                 {% endif %}
             </div>
@@ -257,6 +258,39 @@
                 </div>
                 <div id="backupListContent">
                     <p style="text-align: center; color: #888;">로딩 중...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 연도별 삭제 모달 -->
+        <div id="yearDeleteModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+            <div style="background: white; border-radius: 15px; padding: 30px; max-width: 500px; width: 90%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0;">📅 연도별 데이터 삭제</h3>
+                    <button onclick="closeYearDeleteModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <p style="color: #666; margin-bottom: 15px;">
+                        특정 연도의 월별 판매 데이터만 삭제합니다.<br>
+                        <strong style="color: #e74c3c;">⚠️ 삭제된 데이터는 복구할 수 없습니다!</strong>
+                    </p>
+                    <p style="color: #3498db; font-size: 14px; margin-bottom: 15px;">
+                        💡 <strong>Tip:</strong> 삭제 전 '백업' 버튼으로 데이터를 백업하세요.<br>
+                        백업 파일은 <code>./backups/</code> 폴더에 JSON 형식으로 저장됩니다.
+                    </p>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600;">삭제할 연도 선택:</label>
+                    <select id="yearSelect" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px;">
+                        <option value="">연도를 선택하세요</option>
+                    </select>
+                </div>
+                <div id="yearDeleteInfo" style="display: none; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                    <p id="yearDeleteInfoText" style="margin: 0; color: #856404;"></p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-danger" onclick="deleteByYear()" style="flex: 1;">🗑️ 삭제</button>
+                    <button class="btn btn-secondary" onclick="closeYearDeleteModal()" style="flex: 1; background: #888;">취소</button>
                 </div>
             </div>
         </div>
@@ -283,6 +317,11 @@
                     <div class="icon">📅</div>
                     <h4>월별 데이터</h4>
                     <p>시트별(의류/신발/잡화) 분류된 데이터</p>
+                </div>
+                <div class="file-type-option" data-type="pos">
+                    <div class="icon">🧾</div>
+                    <h4>POS 데이터</h4>
+                    <p>포스기 판매현황 (상품별 월별 집계)</p>
                 </div>
                 <div class="file-type-option" data-type="custom">
                     <div class="icon">📂</div>
@@ -518,6 +557,71 @@
             }
         }
 
+        // ========== 연도별 삭제 ==========
+        async function showYearDeleteModal() {
+            const modal = document.getElementById('yearDeleteModal');
+            const yearSelect = document.getElementById('yearSelect');
+            modal.style.display = 'flex';
+
+            // 연도 목록 로드
+            yearSelect.innerHTML = '<option value="">로딩 중...</option>';
+            try {
+                const response = await fetch('/api/available-years');
+                const result = await response.json();
+
+                if (result.success && result.years && result.years.length > 0) {
+                    yearSelect.innerHTML = '<option value="">연도를 선택하세요</option>';
+                    result.years.forEach(year => {
+                        yearSelect.innerHTML += `<option value="${year}">${year}년</option>`;
+                    });
+                } else {
+                    yearSelect.innerHTML = '<option value="">데이터가 있는 연도가 없습니다</option>';
+                }
+            } catch (error) {
+                yearSelect.innerHTML = '<option value="">연도 목록 조회 실패</option>';
+            }
+
+            // 정보 영역 숨기기
+            document.getElementById('yearDeleteInfo').style.display = 'none';
+        }
+
+        function closeYearDeleteModal() {
+            document.getElementById('yearDeleteModal').style.display = 'none';
+        }
+
+        async function deleteByYear() {
+            const yearSelect = document.getElementById('yearSelect');
+            const year = yearSelect.value;
+
+            if (!year) {
+                showToast('삭제할 연도를 선택해주세요.', 'error');
+                return;
+            }
+
+            if (!confirm(`${year}년도의 모든 월별 판매 데이터를 삭제하시겠습니까?\n\n⚠️ 이 작업은 되돌릴 수 없습니다!`)) return;
+            if (!confirm(`마지막 확인: ${year}년도 데이터가 완전히 삭제됩니다. 계속하시겠습니까?`)) return;
+
+            try {
+                showToast('삭제 중...', 'info');
+                const response = await fetch('/api/delete-by-year', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ year: parseInt(year) })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast(result.message, 'success');
+                    closeYearDeleteModal();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast('삭제 실패: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showToast('삭제 중 오류: ' + error.message, 'error');
+            }
+        }
+
         // 파일 타입 선택
         document.querySelectorAll('.file-type-option').forEach(option => {
             option.addEventListener('click', () => {
@@ -553,6 +657,41 @@
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) handleFile(e.target.files[0]);
         });
+
+        // POS 데이터를 월별 데이터 형식으로 변환
+        function convertPosToMonthly(posRows, year = 2025) {
+            const monthlyRows = [];
+            const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+            for (const row of posRows) {
+                const productName = row['상품명'] || row['품명'] || '';
+                if (!productName) continue;
+
+                // 각 월별 데이터를 별도 행으로 변환
+                for (let m = 0; m < 12; m++) {
+                    const monthCol = monthNames[m];
+                    const qty = parseFloat(row[monthCol]) || 0;
+
+                    if (qty > 0) {
+                        // 해당 월의 15일로 날짜 설정
+                        const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-15`;
+
+                        monthlyRows.push({
+                            '판매일자': dateStr,
+                            '매장명': 'POS',
+                            '상품코드': '',
+                            '상품명': productName,
+                            '분류명': '',
+                            '판매량': qty,
+                            '실판매금액': 0,  // POS 데이터에 금액이 없으면 0
+                            '_source': 'pos'
+                        });
+                    }
+                }
+            }
+
+            return monthlyRows;
+        }
 
         async function handleFile(file) {
             const ext = file.name.split('.').pop().toLowerCase();
@@ -593,14 +732,64 @@
                             allRows.push(row);
                         }
                     }
+                } else if (selectedFileType === 'pos') {
+                    // POS 데이터 (상품명, 합계, 1월~12월 형식)
+                    const data = await file.arrayBuffer();
+                    const workbook = XLSX.read(data, {
+                        type: 'array',
+                        codepage: 949,
+                        raw: false,
+                        cellText: true
+                    });
+
+                    let posRows = [];
+                    for (const sheetName of workbook.SheetNames) {
+                        const sheet = workbook.Sheets[sheetName];
+                        const jsonData = XLSX.utils.sheet_to_json(sheet, {
+                            defval: null,
+                            raw: false
+                        });
+                        posRows = posRows.concat(jsonData);
+                    }
+
+                    // 파일명에서 연도 추출 시도 (예: "25년도" -> 2025)
+                    let year = 2025;
+                    const yearMatch = file.name.match(/(\d{2,4})년/);
+                    if (yearMatch) {
+                        year = yearMatch[1].length === 2 ? 2000 + parseInt(yearMatch[1]) : parseInt(yearMatch[1]);
+                    }
+
+                    // POS 형식을 월별 데이터 형식으로 변환
+                    allRows = convertPosToMonthly(posRows, year);
+
+                    // 파일 타입을 monthly로 변경하여 저장
+                    sheetInfo.push({
+                        sheetName: 'POS',
+                        dataType: file.name.includes('의류') ? '의류' : file.name.includes('신발') ? '신발' : file.name.includes('잡화') ? '잡화' : 'POS',
+                        startIdx: 0,
+                        count: allRows.length
+                    });
+
+                    console.log(`POS 데이터 변환 완료: ${posRows.length}개 상품 → ${allRows.length}개 월별 레코드`);
                 } else {
                     // 진짜 Excel 파일 (.xlsx, 월별 데이터)
                     const data = await file.arrayBuffer();
-                    const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
+                    // raw: true로 원시 데이터 유지, 인코딩 문제 방지
+                    const workbook = XLSX.read(data, {
+                        type: 'array',
+                        codepage: 949,
+                        raw: false,
+                        cellText: true,
+                        cellDates: true
+                    });
 
                     for (const sheetName of workbook.SheetNames) {
                         const sheet = workbook.Sheets[sheetName];
-                        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
+                        const jsonData = XLSX.utils.sheet_to_json(sheet, {
+                            defval: null,
+                            raw: false,
+                            dateNF: 'yyyy-mm-dd'
+                        });
 
                         if (selectedFileType === 'monthly') {
                             let dataType = sheetName;
@@ -609,6 +798,16 @@
                             else if (sheetName.includes('잡화')) dataType = '잡화';
                             sheetInfo.push({ sheetName, dataType, startIdx: allRows.length, count: jsonData.length });
                         }
+
+                        // POS 포맷 감지 (월별 컬럼 존재 확인)
+                        if (jsonData.length > 0) {
+                            const cols = Object.keys(jsonData[0]);
+                            const isPosFormat = cols.some(c => /^(1월|2월|3월|4월|5월|6월|7월|8월|9월|10월|11월|12월)$/.test(c));
+                            if (isPosFormat) {
+                                console.log('POS 포맷 감지:', cols);
+                            }
+                        }
+
                         allRows = allRows.concat(jsonData.map(row => ({...row, _sheet: sheetName})));
                     }
                 }
@@ -642,7 +841,7 @@
                     <strong>📊 총 행수:</strong> ${rows.length.toLocaleString()}행
                 </div>
                 <div style="background: #fff3e0; padding: 10px 15px; border-radius: 8px;">
-                    <strong>📁 파일 타입:</strong> ${selectedFileType === 'original' ? '원본' : selectedFileType === 'monthly' ? '월별' : '커스텀'}
+                    <strong>📁 파일 타입:</strong> ${selectedFileType === 'original' ? '원본' : selectedFileType === 'monthly' ? '월별' : selectedFileType === 'pos' ? 'POS (→ 월별 변환)' : '커스텀'}
                 </div>
             `;
 
@@ -731,8 +930,11 @@
                 return;
             }
 
+            // POS 데이터는 monthly 타입으로 저장
+            const uploadType = selectedFileType === 'pos' ? 'monthly' : selectedFileType;
+
             // 실제 업로드 진행
-            uploadFile(pendingFile, pendingData.rows, pendingData.sheetInfo);
+            uploadFile(pendingFile, pendingData.rows, pendingData.sheetInfo, uploadType);
         }
 
         // 파일을 텍스트로 읽기 (인코딩 지정)
@@ -745,10 +947,13 @@
             });
         }
 
-        async function uploadFile(file, preloadedRows = null, preloadedSheetInfo = null) {
+        async function uploadFile(file, preloadedRows = null, preloadedSheetInfo = null, uploadType = null) {
             const progressDiv = document.getElementById('uploadProgress');
             const progressFill = document.getElementById('progressFill');
             const progressText = document.getElementById('progressText');
+
+            // uploadType이 지정되지 않으면 selectedFileType 사용
+            const fileType = uploadType || selectedFileType;
 
             // 미리보기 영역 숨기고 업로드 영역 표시
             document.getElementById('previewArea').style.display = 'none';
@@ -768,7 +973,7 @@
                     const ext = file.name.split('.').pop().toLowerCase();
 
                     // 원본 데이터 (.xls 확장자지만 실제 TSV 형식) 또는 CSV는 텍스트로 파싱
-                    if (selectedFileType === 'original' || ext === 'csv') {
+                    if (fileType === 'original' || ext === 'csv') {
                         // 텍스트 파일로 읽기 (cp949 인코딩)
                         const text = await readFileAsText(file, 'euc-kr');
                         const lines = text.split('\n').filter(line => line.trim());
@@ -802,7 +1007,7 @@
                             const sheet = workbook.Sheets[sheetName];
                             const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
-                            if (selectedFileType === 'monthly') {
+                            if (fileType === 'monthly') {
                                 let dataType = sheetName;
                                 if (sheetName.includes('의류')) dataType = '의류';
                                 else if (sheetName.includes('신발')) dataType = '신발';
@@ -832,10 +1037,10 @@
                     const chunk = allRows.slice(start, end);
 
                     let dataType = '';
-                    if (selectedFileType === 'monthly' && chunk.length > 0) {
+                    if (fileType === 'monthly' && chunk.length > 0) {
                         const firstRow = chunk[0];
                         const info = sheetInfo.find(s => firstRow._sheet === s.sheetName);
-                        dataType = info ? info.dataType : firstRow._sheet;
+                        dataType = info ? info.dataType : (firstRow._sheet || 'POS');
                     }
 
                     const cleanChunk = chunk.map(row => {
@@ -854,7 +1059,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         file_id: null,
-                        file_type: selectedFileType,
+                        file_type: fileType,
                         rows: firstChunk.rows,
                         chunk_index: 0,
                         total_chunks: totalChunks,
@@ -881,7 +1086,7 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 file_id: fileId,
-                                file_type: selectedFileType,
+                                file_type: fileType,
                                 rows: chunk.rows,
                                 chunk_index: chunk.index,
                                 total_chunks: totalChunks,

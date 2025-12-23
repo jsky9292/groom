@@ -685,13 +685,20 @@ def delete_file_data(file_id):
 
 # ============ 통계 조회 함수들 ============
 
-def get_summary_stats(file_id=None):
-    """요약 통계 (file_id로 필터링 가능)"""
+def get_summary_stats(file_id=None, start_date=None, end_date=None):
+    """요약 통계 (file_id, 날짜로 필터링 가능)"""
     stats = {}
 
     # 파일 필터 조건
     file_filter = f"WHERE file_id = {file_id}" if file_id else ""
-    file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+    file_filter_and = f" AND file_id = {file_id}" if file_id else ""
+
+    # 날짜 필터 조건 (monthly_sales용)
+    date_filter_and = ""
+    if start_date:
+        date_filter_and += f" AND 판매일자 >= '{start_date}'"
+    if end_date:
+        date_filter_and += f" AND 판매일자 <= '{end_date}'"
 
     if IS_LOCAL:
         # 원본 데이터 통계
@@ -707,14 +714,16 @@ def get_summary_stats(file_id=None):
         ''')
         stats['original'] = result[0] if result else {}
 
-        # 월별 데이터 통계
-        result = execute_query('''
+        # 월별 데이터 통계 (날짜 필터 적용)
+        monthly_where = "WHERE 1=1" + file_filter_and + date_filter_and
+        result = execute_query(f'''
             SELECT
                 COUNT(*) as total_records,
                 SUM(실판매금액) as total_sales,
                 SUM(판매량) as total_qty,
                 COUNT(DISTINCT 매장명) as unique_stores
             FROM monthly_sales
+            {monthly_where}
         ''')
         stats['monthly'] = result[0] if result else {}
 
@@ -726,14 +735,22 @@ def get_summary_stats(file_id=None):
         ''')
         stats['by_type'] = {row['data_type']: row['cnt'] for row in result if row.get('data_type')}
     else:
-        # Supabase - file_id 필터링 적용
+        # Supabase - file_id 및 날짜 필터링 적용
         try:
+            # sales_data 필터
+            sales_filter = f'file_id=eq.{file_id}' if file_id else None
+            sales = supabase_select('sales_data', '*', sales_filter) if sales_filter else supabase_select('sales_data', '*')
+
+            # monthly_sales 필터 (날짜 조건 포함)
+            monthly_filters = []
             if file_id:
-                sales = supabase_select('sales_data', '*', f'file_id=eq.{file_id}')
-                monthly = supabase_select('monthly_sales', '*', f'file_id=eq.{file_id}')
-            else:
-                sales = supabase_select('sales_data', '*')
-                monthly = supabase_select('monthly_sales', '*')
+                monthly_filters.append(f'file_id=eq.{file_id}')
+            if start_date:
+                monthly_filters.append(f'판매일자=gte.{start_date}')
+            if end_date:
+                monthly_filters.append(f'판매일자=lte.{end_date}')
+            monthly_filter = '&'.join(monthly_filters) if monthly_filters else None
+            monthly = supabase_select('monthly_sales', '*', monthly_filter) if monthly_filter else supabase_select('monthly_sales', '*')
 
             stats['original'] = {
                 'total_records': len(sales),
@@ -890,9 +907,15 @@ def get_top_products(file_id=None):
         except:
             return []
 
-def get_daily_sales(file_id=None):
-    """일별 매출 (file_id로 필터링 가능)"""
+def get_daily_sales(file_id=None, start_date=None, end_date=None):
+    """일별 매출 (file_id, 날짜로 필터링 가능)"""
     file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+    date_filter_and = ""
+    if start_date:
+        date_filter_and += f" AND 판매일자 >= '{start_date}'"
+    if end_date:
+        date_filter_and += f" AND 판매일자 <= '{end_date}'"
+
     if IS_LOCAL:
         return execute_query(f'''
             SELECT
@@ -901,16 +924,21 @@ def get_daily_sales(file_id=None):
                 SUM(판매량) as 판매량,
                 COUNT(*) as 건수
             FROM monthly_sales
-            WHERE 판매일자 IS NOT NULL {file_filter_and}
+            WHERE 판매일자 IS NOT NULL {file_filter_and} {date_filter_and}
             GROUP BY 판매일자
             ORDER BY 판매일자
         ''')
     else:
         try:
+            # 날짜 필터 포함 Supabase 쿼리
+            filters = ['판매일자=not.is.null']
             if file_id:
-                monthly = supabase_select('monthly_sales', '*', f'판매일자=not.is.null&file_id=eq.{file_id}')
-            else:
-                monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
+                filters.append(f'file_id=eq.{file_id}')
+            if start_date:
+                filters.append(f'판매일자=gte.{start_date}')
+            if end_date:
+                filters.append(f'판매일자=lte.{end_date}')
+            monthly = supabase_select('monthly_sales', '*', '&'.join(filters))
             agg = {}
             for r in monthly:
                 date = r.get('판매일자')
@@ -925,9 +953,104 @@ def get_daily_sales(file_id=None):
         except:
             return []
 
-def get_monthly_sales(file_id=None):
-    """월별 매출 (일별 데이터를 월 단위로 집계, file_id로 필터링 가능)"""
+def get_weekly_sales(file_id=None, start_date=None, end_date=None):
+    """주간별 매출 (일별 데이터를 주 단위로 집계, file_id, 날짜로 필터링 가능)"""
+    file_filter_and = f" AND file_id = {file_id}" if file_id else ""
+    date_filter_and = ""
+    if start_date:
+        date_filter_and += f" AND 판매일자 >= '{start_date}'"
+    if end_date:
+        date_filter_and += f" AND 판매일자 <= '{end_date}'"
+
+    if IS_LOCAL:
+        # SQLite에서 주차 계산: strftime('%W', date)는 주차 번호 반환
+        return execute_query(f'''
+            SELECT
+                SUBSTR(판매일자, 1, 4) || '-W' || PRINTF('%02d', CAST(STRFTIME('%W', 판매일자) AS INTEGER) + 1) as 주차,
+                MIN(판매일자) as 시작일,
+                MAX(판매일자) as 종료일,
+                SUM(실판매금액) as 실판매금액,
+                SUM(판매량) as 판매량,
+                COUNT(*) as 건수,
+                COUNT(DISTINCT 매장명) as 매장수
+            FROM monthly_sales
+            WHERE 판매일자 IS NOT NULL {file_filter_and} {date_filter_and}
+            GROUP BY SUBSTR(판매일자, 1, 4), STRFTIME('%W', 판매일자)
+            ORDER BY 주차
+        ''')
+    else:
+        try:
+            # 날짜 필터 포함 Supabase 쿼리
+            filters = ['판매일자=not.is.null']
+            if file_id:
+                filters.append(f'file_id=eq.{file_id}')
+            if start_date:
+                filters.append(f'판매일자=gte.{start_date}')
+            if end_date:
+                filters.append(f'판매일자=lte.{end_date}')
+            monthly = supabase_select('monthly_sales', '*', '&'.join(filters))
+
+            # 주차별 집계
+            agg = {}
+            for r in monthly:
+                date = r.get('판매일자')
+                if not date or len(date) < 10:
+                    continue
+                # 날짜에서 주차 계산
+                try:
+                    from datetime import datetime as dt
+                    d = dt.strptime(date[:10], '%Y-%m-%d')
+                    year = d.year
+                    week = d.isocalendar()[1]
+                    week_key = f"{year}-W{week:02d}"
+                except:
+                    continue
+
+                if week_key not in agg:
+                    agg[week_key] = {
+                        '주차': week_key,
+                        '시작일': date,
+                        '종료일': date,
+                        '실판매금액': 0,
+                        '판매량': 0,
+                        '건수': 0,
+                        '매장수': set()
+                    }
+
+                # 시작일/종료일 업데이트
+                if date < agg[week_key]['시작일']:
+                    agg[week_key]['시작일'] = date
+                if date > agg[week_key]['종료일']:
+                    agg[week_key]['종료일'] = date
+
+                agg[week_key]['실판매금액'] += float(r.get('실판매금액') or 0)
+                agg[week_key]['판매량'] += float(r.get('판매량') or 0)
+                agg[week_key]['건수'] += 1
+                if r.get('매장명'):
+                    agg[week_key]['매장수'].add(r.get('매장명'))
+
+            result = [{
+                '주차': v['주차'],
+                '시작일': v['시작일'],
+                '종료일': v['종료일'],
+                '실판매금액': v['실판매금액'],
+                '판매량': v['판매량'],
+                '건수': v['건수'],
+                '매장수': len(v['매장수'])
+            } for v in agg.values()]
+            return sorted(result, key=lambda x: x['주차'])
+        except:
+            return []
+
+def get_monthly_sales(file_id=None, start_date=None, end_date=None):
+    """월별 매출 (일별 데이터를 월 단위로 집계, file_id, 날짜로 필터링 가능)"""
     file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+    date_filter_and = ""
+    if start_date:
+        date_filter_and += f" AND 판매일자 >= '{start_date}'"
+    if end_date:
+        date_filter_and += f" AND 판매일자 <= '{end_date}'"
+
     if IS_LOCAL:
         return execute_query(f'''
             SELECT
@@ -937,16 +1060,21 @@ def get_monthly_sales(file_id=None):
                 COUNT(*) as 건수,
                 COUNT(DISTINCT 매장명) as 매장수
             FROM monthly_sales
-            WHERE 판매일자 IS NOT NULL {file_filter_and}
+            WHERE 판매일자 IS NOT NULL {file_filter_and} {date_filter_and}
             GROUP BY SUBSTR(판매일자, 1, 7)
             ORDER BY 월
         ''')
     else:
         try:
+            # 날짜 필터 포함 Supabase 쿼리
+            filters = ['판매일자=not.is.null']
             if file_id:
-                monthly = supabase_select('monthly_sales', '*', f'판매일자=not.is.null&file_id=eq.{file_id}')
-            else:
-                monthly = supabase_select('monthly_sales', '*', '판매일자=not.is.null')
+                filters.append(f'file_id=eq.{file_id}')
+            if start_date:
+                filters.append(f'판매일자=gte.{start_date}')
+            if end_date:
+                filters.append(f'판매일자=lte.{end_date}')
+            monthly = supabase_select('monthly_sales', '*', '&'.join(filters))
             agg = {}
             for r in monthly:
                 date = r.get('판매일자')
@@ -965,9 +1093,15 @@ def get_monthly_sales(file_id=None):
         except:
             return []
 
-def get_store_sales(file_id=None):
-    """매장별 매출 (file_id로 필터링 가능)"""
+def get_store_sales(file_id=None, start_date=None, end_date=None):
+    """매장별 매출 (file_id, 날짜로 필터링 가능)"""
     file_filter_and = f"AND file_id = {file_id}" if file_id else ""
+    date_filter_and = ""
+    if start_date:
+        date_filter_and += f" AND 판매일자 >= '{start_date}'"
+    if end_date:
+        date_filter_and += f" AND 판매일자 <= '{end_date}'"
+
     if IS_LOCAL:
         return execute_query(f'''
             SELECT
@@ -976,17 +1110,22 @@ def get_store_sales(file_id=None):
                 SUM(판매량) as 판매량,
                 COUNT(*) as 건수
             FROM monthly_sales
-            WHERE 매장명 IS NOT NULL AND 매장명 != '' {file_filter_and}
+            WHERE 매장명 IS NOT NULL AND 매장명 != '' {file_filter_and} {date_filter_and}
             GROUP BY 매장명
             ORDER BY 실판매금액 DESC
             LIMIT 30
         ''')
     else:
         try:
+            # 날짜 필터 포함 Supabase 쿼리
+            filters = ['매장명=not.is.null']
             if file_id:
-                monthly = supabase_select('monthly_sales', '*', f'매장명=not.is.null&file_id=eq.{file_id}')
-            else:
-                monthly = supabase_select('monthly_sales', '*', '매장명=not.is.null')
+                filters.append(f'file_id=eq.{file_id}')
+            if start_date:
+                filters.append(f'판매일자=gte.{start_date}')
+            if end_date:
+                filters.append(f'판매일자=lte.{end_date}')
+            monthly = supabase_select('monthly_sales', '*', '&'.join(filters))
             agg = {}
             for r in monthly:
                 store = r.get('매장명')
@@ -1441,6 +1580,78 @@ def reset_all_data():
         except:
             pass
         return True
+
+def delete_data_by_year(year):
+    """특정 연도의 판매 데이터 삭제 (monthly_sales 테이블)
+
+    Args:
+        year: 삭제할 연도 (예: 2025)
+
+    Returns:
+        dict: 삭제된 건수 정보
+    """
+    year_str = str(year)
+    start_date = f"{year_str}-01-01"
+    end_date = f"{year_str}-12-31"
+
+    deleted_counts = {'monthly_sales': 0, 'sales_data': 0}
+
+    if IS_LOCAL:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # monthly_sales에서 해당 연도 데이터 삭제
+        cursor.execute(f"SELECT COUNT(*) FROM monthly_sales WHERE 판매일자 >= '{start_date}' AND 판매일자 <= '{end_date}'")
+        deleted_counts['monthly_sales'] = cursor.fetchone()[0]
+        cursor.execute(f"DELETE FROM monthly_sales WHERE 판매일자 >= '{start_date}' AND 판매일자 <= '{end_date}'")
+
+        conn.commit()
+        conn.close()
+    else:
+        # Supabase에서 해당 연도 데이터 삭제
+        try:
+            # 먼저 삭제될 데이터 수 조회
+            monthly = supabase_select('monthly_sales', 'id', f'판매일자=gte.{start_date}&판매일자=lte.{end_date}')
+            deleted_counts['monthly_sales'] = len(monthly)
+
+            # 데이터 삭제
+            if monthly:
+                supabase_delete('monthly_sales', f'판매일자=gte.{start_date}&판매일자=lte.{end_date}')
+        except Exception as e:
+            print(f"Year deletion error: {e}")
+
+    return deleted_counts
+
+def get_available_years():
+    """데이터에 존재하는 연도 목록 조회
+
+    Returns:
+        list: 연도 목록 (예: [2024, 2025])
+    """
+    years = set()
+
+    if IS_LOCAL:
+        # monthly_sales에서 연도 추출
+        result = execute_query('''
+            SELECT DISTINCT SUBSTR(판매일자, 1, 4) as year
+            FROM monthly_sales
+            WHERE 판매일자 IS NOT NULL
+            ORDER BY year DESC
+        ''')
+        for row in result:
+            if row.get('year'):
+                years.add(int(row['year']))
+    else:
+        try:
+            monthly = supabase_select('monthly_sales', '판매일자', '판매일자=not.is.null')
+            for r in monthly:
+                date = r.get('판매일자')
+                if date and len(date) >= 4:
+                    years.add(int(date[:4]))
+        except:
+            pass
+
+    return sorted(list(years), reverse=True)
 
 def get_data_counts():
     """각 테이블의 데이터 건수 조회"""

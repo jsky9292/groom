@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>커스텀 데이터 뷰어 - 구름환경</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; min-height: 100vh; }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar h1 { color: white; font-size: 20px; }
+        .navbar-right { display: flex; align-items: center; gap: 15px; }
+        .navbar-right a { color: white; text-decoration: none; padding: 8px 16px; border-radius: 6px; background: rgba(255,255,255,0.2); }
+        .navbar-right a:hover { background: rgba(255,255,255,0.3); }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        .card-title { font-size: 16px; font-weight: 600; margin-bottom: 15px; color: #333; }
+
+        .controls { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        .control-group label { font-size: 12px; color: #666; font-weight: 500; }
+        .control-group select, .control-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a6fd6; }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-info { background: #3498db; color: white; }
+
+        .chart-container { height: 350px; margin: 20px 0; }
+
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th, .data-table td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        .data-table th { background: #f8f9fa; font-weight: 600; position: sticky; top: 0; }
+        .data-table tr:hover { background: #f8f9fa; }
+        .table-wrapper { max-height: 400px; overflow: auto; border: 1px solid #eee; border-radius: 8px; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 10px; text-align: center; }
+        .stat-card .value { font-size: 24px; font-weight: bold; }
+        .stat-card .label { font-size: 12px; opacity: 0.9; }
+
+        .tabs { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .tab { padding: 8px 16px; border: none; background: #f0f0f0; border-radius: 6px 6px 0 0; cursor: pointer; }
+        .tab.active { background: #667eea; color: white; }
+
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        .top-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .top-item { background: #f8f9fa; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; }
+        .top-item .name { font-weight: 500; color: #333; }
+        .top-item .value { color: #667eea; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>📊 커스텀 데이터 뷰어</h1>
+        <div class="navbar-right">
+            <a href="{{ url_for('dashboard') }}">📈 대시보드</a>
+            <a href="{{ url_for('upload_page') }}">📁 데이터 업로드</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 파일 선택 -->
+        <div class="card">
+            <div class="card-title">📁 데이터 소스 선택</div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>파일 선택</label>
+                    <select id="fileSelect" onchange="loadFileData()">
+                        <option value="">파일을 선택하세요</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>직접 업로드</label>
+                    <input type="file" id="directUpload" accept=".xlsx,.xls,.csv" onchange="handleDirectUpload(event)">
+                </div>
+            </div>
+        </div>
+
+        <!-- 데이터 정보 -->
+        <div class="card" id="dataInfoCard" style="display: none;">
+            <div class="card-title">📋 데이터 정보</div>
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <div class="controls" style="margin-top: 15px;">
+                <div class="control-group">
+                    <label>그룹화 기준 (X축)</label>
+                    <select id="groupByCol"></select>
+                </div>
+                <div class="control-group">
+                    <label>집계 컬럼 (Y축)</label>
+                    <select id="valueCol"></select>
+                </div>
+                <div class="control-group">
+                    <label>집계 방식</label>
+                    <select id="aggMethod">
+                        <option value="sum">합계</option>
+                        <option value="count">개수</option>
+                        <option value="avg">평균</option>
+                        <option value="max">최대</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>차트 종류</label>
+                    <select id="chartType">
+                        <option value="bar">막대</option>
+                        <option value="line">꺾은선</option>
+                        <option value="pie">파이</option>
+                        <option value="doughnut">도넛</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="updateChart()">🔄 차트 업데이트</button>
+                <button class="btn btn-success" onclick="exportToExcel()">📥 Excel 저장</button>
+            </div>
+        </div>
+
+        <!-- 탭 뷰 -->
+        <div class="card" id="viewCard" style="display: none;">
+            <div class="tabs">
+                <button class="tab active" onclick="showView('chart')">📊 차트</button>
+                <button class="tab" onclick="showView('table')">📋 테이블</button>
+                <button class="tab" onclick="showView('top')">🏆 TOP 항목</button>
+                <button class="tab" onclick="showView('monthly')">📅 월별 현황</button>
+            </div>
+
+            <!-- 차트 뷰 -->
+            <div id="chartView" class="view-section active">
+                <div class="chart-container">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 테이블 뷰 -->
+            <div id="tableView" class="view-section">
+                <div class="table-wrapper">
+                    <table class="data-table" id="dataTable">
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TOP 항목 뷰 -->
+            <div id="topView" class="view-section">
+                <div class="card-title">🏆 상위 20개 항목</div>
+                <div class="top-items" id="topItems"></div>
+            </div>
+
+            <!-- 월별 현황 뷰 -->
+            <div id="monthlyView" class="view-section">
+                <div class="chart-container">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+                <div class="table-wrapper" style="margin-top: 15px;">
+                    <table class="data-table" id="monthlyTable">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let currentData = [];
+        let currentColumns = [];
+        let mainChart = null;
+        let monthlyChart = null;
+
+        // 페이지 로드 시 파일 목록 가져오기
+        document.addEventListener('DOMContentLoaded', loadFileList);
+
+        async function loadFileList() {
+            try {
+                const response = await fetch('/api/files');
+                const result = await response.json();
+                if (result.success) {
+                    const select = document.getElementById('fileSelect');
+                    result.files.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file.id;
+                        option.textContent = `[${file.file_type}] ${file.original_name} (${file.row_count.toLocaleString()}행)`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (e) {
+                console.error('파일 목록 로드 실패:', e);
+            }
+        }
+
+        async function loadFileData() {
+            const fileId = document.getElementById('fileSelect').value;
+            if (!fileId) return;
+
+            try {
+                const response = await fetch(`/api/custom-data?file_id=${fileId}`);
+                const result = await response.json();
+                if (result.success) {
+                    processData(result.data, result.columns);
+                } else {
+                    alert('데이터 로드 실패: ' + result.error);
+                }
+            } catch (e) {
+                console.error('데이터 로드 실패:', e);
+            }
+        }
+
+        function handleDirectUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: null });
+
+                if (jsonData.length > 0) {
+                    const columns = Object.keys(jsonData[0]);
+                    processData(jsonData, columns);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processData(data, columns) {
+            currentData = data;
+            currentColumns = columns;
+
+            // UI 표시
+            document.getElementById('dataInfoCard').style.display = 'block';
+            document.getElementById('viewCard').style.display = 'block';
+
+            // 통계 표시
+            displayStats();
+
+            // 컬럼 셀렉트 업데이트
+            updateColumnSelects();
+
+            // 테이블 표시
+            displayTable();
+
+            // 기본 차트 표시
+            updateChart();
+
+            // 월별 현황 (월 컬럼이 있으면)
+            displayMonthlyView();
+
+            // TOP 항목
+            displayTopItems();
+        }
+
+        function displayStats() {
+            const grid = document.getElementById('statsGrid');
+
+            // 숫자 컬럼 찾기
+            const numericCols = currentColumns.filter(col => {
+                return currentData.some(row => typeof row[col] === 'number' && !isNaN(row[col]));
+            });
+
+            let html = `
+                <div class="stat-card">
+                    <div class="value">${currentData.length.toLocaleString()}</div>
+                    <div class="label">총 행수</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value">${currentColumns.length}</div>
+                    <div class="label">컬럼 수</div>
+                </div>
+            `;
+
+            // 숫자 컬럼 합계 표시 (최대 4개)
+            numericCols.slice(0, 4).forEach(col => {
+                const sum = currentData.reduce((acc, row) => acc + (parseFloat(row[col]) || 0), 0);
+                html += `
+                    <div class="stat-card">
+                        <div class="value">${sum.toLocaleString()}</div>
+                        <div class="label">${col} 합계</div>
+                    </div>
+                `;
+            });
+
+            grid.innerHTML = html;
+        }
+
+        function updateColumnSelects() {
+            const groupBySelect = document.getElementById('groupByCol');
+            const valueSelect = document.getElementById('valueCol');
+
+            // 문자열 컬럼 (그룹화용)
+            const stringCols = currentColumns.filter(col => {
+                return currentData.some(row => typeof row[col] === 'string');
+            });
+
+            // 숫자 컬럼 (집계용)
+            const numericCols = currentColumns.filter(col => {
+                return currentData.some(row => typeof row[col] === 'number');
+            });
+
+            groupBySelect.innerHTML = currentColumns.map(col =>
+                `<option value="${col}">${col}</option>`
+            ).join('');
+
+            valueSelect.innerHTML = '<option value="_count">행 개수</option>' +
+                numericCols.map(col => `<option value="${col}">${col}</option>`).join('');
+
+            // 기본값 설정
+            if (stringCols.includes('상품명')) groupBySelect.value = '상품명';
+            if (numericCols.includes('합계')) valueSelect.value = '합계';
+            else if (numericCols.includes('판매량')) valueSelect.value = '판매량';
+        }
+
+        function updateChart() {
+            const groupByCol = document.getElementById('groupByCol').value;
+            const valueCol = document.getElementById('valueCol').value;
+            const aggMethod = document.getElementById('aggMethod').value;
+            const chartType = document.getElementById('chartType').value;
+
+            // 데이터 집계
+            const grouped = {};
+            currentData.forEach(row => {
+                const key = row[groupByCol] || '(없음)';
+                if (!grouped[key]) grouped[key] = [];
+
+                if (valueCol === '_count') {
+                    grouped[key].push(1);
+                } else {
+                    const val = parseFloat(row[valueCol]) || 0;
+                    grouped[key].push(val);
+                }
+            });
+
+            // 집계 계산
+            const result = {};
+            Object.keys(grouped).forEach(key => {
+                const values = grouped[key];
+                switch (aggMethod) {
+                    case 'sum': result[key] = values.reduce((a, b) => a + b, 0); break;
+                    case 'count': result[key] = values.length; break;
+                    case 'avg': result[key] = values.reduce((a, b) => a + b, 0) / values.length; break;
+                    case 'max': result[key] = Math.max(...values); break;
+                }
+            });
+
+            // 정렬 (값 기준 내림차순)
+            const sorted = Object.entries(result).sort((a, b) => b[1] - a[1]);
+            const labels = sorted.slice(0, 20).map(x => x[0]);
+            const values = sorted.slice(0, 20).map(x => x[1]);
+
+            // 차트 그리기
+            if (mainChart) mainChart.destroy();
+
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7', '#fa709a', '#fee140'];
+
+            mainChart = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: valueCol === '_count' ? '개수' : valueCol,
+                        data: values,
+                        backgroundColor: chartType === 'pie' || chartType === 'doughnut'
+                            ? colors.concat(colors)
+                            : 'rgba(102, 126, 234, 0.8)',
+                        borderColor: chartType === 'line' ? '#667eea' : 'rgba(255,255,255,0.8)',
+                        borderWidth: 1,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: chartType === 'pie' || chartType === 'doughnut' }
+                    }
+                }
+            });
+
+            // TOP 항목 업데이트
+            displayTopItems(sorted);
+        }
+
+        function displayTable() {
+            const thead = document.getElementById('tableHead');
+            const tbody = document.getElementById('tableBody');
+
+            // 헤더
+            thead.innerHTML = '<tr>' + currentColumns.map(col => `<th>${col}</th>`).join('') + '</tr>';
+
+            // 바디 (최대 500행)
+            tbody.innerHTML = currentData.slice(0, 500).map(row =>
+                '<tr>' + currentColumns.map(col => {
+                    let val = row[col];
+                    if (val === null || val === undefined) val = '';
+                    if (typeof val === 'number') val = val.toLocaleString();
+                    return `<td>${val}</td>`;
+                }).join('') + '</tr>'
+            ).join('');
+
+            if (currentData.length > 500) {
+                tbody.innerHTML += `<tr><td colspan="${currentColumns.length}" style="text-align:center; color:#888;">... 외 ${(currentData.length - 500).toLocaleString()}행 더 있음</td></tr>`;
+            }
+        }
+
+        function displayTopItems(sorted = null) {
+            if (!sorted) {
+                const valueCol = document.getElementById('valueCol').value;
+                sorted = currentData.map(row => [
+                    row['상품명'] || row[currentColumns[0]],
+                    valueCol === '_count' ? 1 : (parseFloat(row[valueCol]) || 0)
+                ]);
+
+                // 같은 항목 합치기
+                const grouped = {};
+                sorted.forEach(([name, val]) => {
+                    grouped[name] = (grouped[name] || 0) + val;
+                });
+                sorted = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
+            }
+
+            const container = document.getElementById('topItems');
+            container.innerHTML = sorted.slice(0, 20).map(([name, val], i) => `
+                <div class="top-item">
+                    <span class="name">${i + 1}. ${name}</span>
+                    <span class="value">${typeof val === 'number' ? val.toLocaleString() : val}</span>
+                </div>
+            `).join('');
+        }
+
+        function displayMonthlyView() {
+            // 월 관련 컬럼 찾기
+            const monthCols = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+            const hasMonthCols = monthCols.some(m => currentColumns.includes(m));
+
+            if (!hasMonthCols) {
+                document.getElementById('monthlyView').innerHTML = '<p style="text-align:center; color:#888; padding:50px;">월별 컬럼이 없습니다.</p>';
+                return;
+            }
+
+            // 월별 합계 계산
+            const monthlyData = monthCols.map(month => {
+                if (!currentColumns.includes(month)) return 0;
+                return currentData.reduce((sum, row) => sum + (parseFloat(row[month]) || 0), 0);
+            });
+
+            // 차트
+            if (monthlyChart) monthlyChart.destroy();
+            const ctx = document.getElementById('monthlyChart').getContext('2d');
+            monthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: monthCols,
+                    datasets: [{
+                        label: '판매량',
+                        data: monthlyData,
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 테이블
+            const table = document.getElementById('monthlyTable');
+            table.innerHTML = `
+                <thead><tr><th>월</th><th>판매량</th><th>비율</th></tr></thead>
+                <tbody>
+                    ${monthCols.map((month, i) => {
+                        const total = monthlyData.reduce((a, b) => a + b, 0);
+                        const pct = total > 0 ? (monthlyData[i] / total * 100).toFixed(1) : 0;
+                        return `<tr><td>${month}</td><td>${monthlyData[i].toLocaleString()}</td><td>${pct}%</td></tr>`;
+                    }).join('')}
+                    <tr style="font-weight:bold; background:#f0f0f0;">
+                        <td>합계</td>
+                        <td>${monthlyData.reduce((a, b) => a + b, 0).toLocaleString()}</td>
+                        <td>100%</td>
+                    </tr>
+                </tbody>
+            `;
+        }
+
+        function showView(viewName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(viewName + 'View').classList.add('active');
+        }
+
+        function exportToExcel() {
+            const ws = XLSX.utils.json_to_sheet(currentData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Data');
+            XLSX.writeFile(wb, 'custom_data_export.xlsx');
+        }
+    </script>
+</body>
+</html>

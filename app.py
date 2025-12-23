@@ -609,7 +609,7 @@ def api_data_counts():
 def api_custom_data():
     """파일의 원본 데이터 조회 (커스텀 뷰어용)"""
     file_id = request.args.get('file_id', type=int)
-    limit = request.args.get('limit', 10000, type=int)
+    limit = request.args.get('limit', 100000, type=int)  # 10만행까지 허용
 
     if not file_id:
         return jsonify({'success': False, 'error': '파일 ID가 필요합니다.'})

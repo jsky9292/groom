@@ -866,6 +866,28 @@ def product_images_page():
     return render_template('product_images.html', count=count)
 
 
+# ============ 공개 카탈로그 (로그인 불필요) ============
+
+@app.route('/catalog')
+def catalog_page():
+    """바이어용 공개 카탈로그 페이지 (로그인 불필요)"""
+    return render_template('catalog.html')
+
+
+@app.route('/api/catalog')
+def api_catalog():
+    """공개 카탈로그 API (로그인 불필요)"""
+    try:
+        data = get_all_product_images()
+        return jsonify({
+            'success': True,
+            'data': data,
+            'total': len(data)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
 @app.route('/api/product-options/<product_code>')
 @login_required
 def api_product_options(product_code):

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>상품 이미지 관리 - DRCAMP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+
+        .navbar {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .navbar h1 { font-size: 1.5rem; }
+        .navbar a { color: white; text-decoration: none; margin-left: 20px; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 5px; }
+        .navbar a:hover { background: rgba(255,255,255,0.3); }
+
+        .container { max-width: 1400px; margin: 20px auto; padding: 0 20px; }
+
+        .stats-bar {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .stat-item { text-align: center; }
+        .stat-item .number { font-size: 2rem; font-weight: bold; color: #3498db; }
+        .stat-item .label { color: #7f8c8d; font-size: 0.9rem; }
+
+        .search-box {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+        }
+        .search-box input {
+            flex: 1;
+            padding: 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .search-box input:focus { outline: none; border-color: #3498db; }
+        .search-box button {
+            padding: 12px 24px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .search-box button:hover { background: #2980b9; }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .image-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: pointer;
+        }
+        .image-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        .image-card:active {
+            transform: translateY(-2px);
+        }
+
+        .image-wrapper {
+            width: 100%;
+            height: 180px;
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .image-wrapper img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .image-wrapper .no-image {
+            color: #bdc3c7;
+            font-size: 3rem;
+        }
+
+        .card-info {
+            padding: 15px;
+        }
+        .card-info .product-name {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            line-height: 1.3;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .card-info .product-code {
+            color: #3498db;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+        .card-info .supplier-option {
+            color: #7f8c8d;
+            font-size: 0.75rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .option-badge {
+            display: inline-block;
+            background: #e74c3c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            margin-left: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .option-badge:hover {
+            background: #c0392b;
+        }
+
+        /* 모달 스타일 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        .modal-body {
+            padding: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .option-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .option-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .option-item:last-child {
+            border-bottom: none;
+        }
+        .option-item .option-num {
+            background: #3498db;
+            color: white;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+        .option-item .option-text {
+            flex: 1;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 100px 20px;
+            color: #7f8c8d;
+        }
+        .empty-state .icon { font-size: 4rem; margin-bottom: 20px; }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 30px;
+            padding-bottom: 30px;
+        }
+        .pagination button {
+            padding: 10px 20px;
+            border: none;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .pagination button:hover { background: #f0f0f0; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination .page-info { padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>📷 상품 이미지 관리</h1>
+        <div>
+            <a href="{{ url_for('dashboard') }}">📊 대시보드</a>
+            <a href="{{ url_for('upload_page') }}">📤 업로드</a>
+            <a href="{{ url_for('logout') }}">로그아웃</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="number" id="totalCount">{{ count }}</div>
+                <div class="label">전체 이미지 매핑</div>
+            </div>
+            <div class="stat-item">
+                <div class="number" id="displayCount">0</div>
+                <div class="label">표시 중</div>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="상품명으로 검색..." onkeypress="if(event.key==='Enter') searchProducts()">
+                <button onclick="searchProducts()">검색</button>
+                <button onclick="loadAllProducts()" style="background: #2ecc71;">전체보기</button>
+            </div>
+        </div>
+
+        <div id="imageGrid" class="image-grid">
+            <div class="loading">로딩 중...</div>
+        </div>
+
+        <div class="pagination" id="pagination" style="display: none;">
+            <button onclick="prevPage()" id="prevBtn">← 이전</button>
+            <span class="page-info" id="pageInfo">1 / 1</span>
+            <button onclick="nextPage()" id="nextBtn">다음 →</button>
+        </div>
+    </div>
+
+    <!-- 옵션 모달 -->
+    <div class="modal-overlay" id="optionModal" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modalTitle">옵션 목록</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="modalImage" style="text-align:center; margin-bottom:15px; padding:15px; background:#f8f9fa; border-radius:10px;">
+                    <img id="modalProductImage" src="" alt="" style="max-width:200px; max-height:200px; object-fit:contain;">
+                </div>
+                <div id="modalSummary" style="background:#e8f5e9; padding:10px 15px; border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-around; text-align:center;">
+                    <div><strong id="totalOptions">0</strong><br><small>옵션수</small></div>
+                    <div><strong id="totalStock" style="color:#27ae60;">0</strong><br><small>총 재고</small></div>
+                    <div><strong id="outOfStock" style="color:#e74c3c;">0</strong><br><small>품절</small></div>
+                </div>
+                <ul class="option-list" id="optionList">
+                    <!-- 옵션 목록이 여기에 표시됩니다 -->
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allProducts = [];
+        let currentPage = 1;
+        const itemsPerPage = 50;
+
+        async function loadAllProducts() {
+            document.getElementById('imageGrid').innerHTML = '<div class="loading">로딩 중...</div>';
+            document.getElementById('searchInput').value = '';
+
+            try {
+                const response = await fetch('/api/product-images');
+                const result = await response.json();
+
+                if (result.success) {
+                    allProducts = result.data;
+                    currentPage = 1;
+                    renderProducts();
+                } else {
+                    showEmpty('데이터를 불러올 수 없습니다.');
+                }
+            } catch (error) {
+                showEmpty('오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        async function searchProducts() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (!keyword) {
+                loadAllProducts();
+                return;
+            }
+
+            document.getElementById('imageGrid').innerHTML = '<div class="loading">검색 중...</div>';
+
+            try {
+                const response = await fetch('/api/product-images?search=' + encodeURIComponent(keyword));
+                const result = await response.json();
+
+                if (result.success) {
+                    allProducts = result.data;
+                    currentPage = 1;
+                    renderProducts();
+                } else {
+                    showEmpty('검색 결과가 없습니다.');
+                }
+            } catch (error) {
+                showEmpty('오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        function renderProducts() {
+            const grid = document.getElementById('imageGrid');
+
+            if (allProducts.length === 0) {
+                showEmpty('등록된 상품 이미지가 없습니다.');
+                return;
+            }
+
+            // 페이지네이션 계산
+            const totalPages = Math.ceil(allProducts.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageProducts = allProducts.slice(start, end);
+
+            // 그리드 렌더링
+            grid.innerHTML = pageProducts.map(p => {
+                const optionCount = p.option_count || 1;
+                const productName = (p.product_name || '-').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const optionBadge = optionCount > 1
+                    ? '<span class="option-badge">' + optionCount + '개 옵션</span>'
+                    : '<span class="option-badge" style="background:#3498db;">상세보기</span>';
+                return '<div class="image-card" onclick="showOptions(\'' + p.product_code + '\', \'' + productName + '\')">' +
+                    '<div class="image-wrapper">' +
+                        '<img src="' + p.image_url + '" alt="' + (p.product_name || '') + '"' +
+                             ' onerror="tryAlternativeImage(this, \'' + p.product_code + '\')">' +
+                    '</div>' +
+                    '<div class="card-info">' +
+                        '<div class="product-name" title="' + (p.product_name || '') + '">' + (p.product_name || '-') + optionBadge + '</div>' +
+                        '<div class="product-code">상품코드: ' + (p.product_code || '-') + '</div>' +
+                        '<div class="supplier-option" title="' + (p.supplier_option || '') + '">옵션: ' + (p.supplier_option || '-') + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+
+            // 통계 업데이트
+            document.getElementById('displayCount').textContent = allProducts.length;
+
+            // 페이지네이션 업데이트
+            const pagination = document.getElementById('pagination');
+            if (totalPages > 1) {
+                pagination.style.display = 'flex';
+                document.getElementById('pageInfo').textContent = `${currentPage} / ${totalPages}`;
+                document.getElementById('prevBtn').disabled = currentPage === 1;
+                document.getElementById('nextBtn').disabled = currentPage === totalPages;
+            } else {
+                pagination.style.display = 'none';
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderProducts();
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(allProducts.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderProducts();
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function showEmpty(message) {
+            document.getElementById('imageGrid').innerHTML = `
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="icon">📷</div>
+                    <p>${message}</p>
+                </div>
+            `;
+            document.getElementById('displayCount').textContent = '0';
+            document.getElementById('pagination').style.display = 'none';
+        }
+
+        // 이미지 로드 실패 시 다른 확장자 시도
+        function tryAlternativeImage(img, productCode) {
+            const baseUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/';
+            const currentSrc = img.src;
+
+            // 시도할 확장자 순서
+            const extensions = ['png', 'jpg', 'jpeg'];
+
+            // 현재 확장자 확인
+            let currentExt = currentSrc.split('.').pop();
+            let nextExtIndex = extensions.indexOf(currentExt) + 1;
+
+            if (nextExtIndex < extensions.length) {
+                // 다음 확장자 시도
+                img.src = baseUrl + productCode + '_500.' + extensions[nextExtIndex];
+            } else {
+                // 모든 확장자 실패 - 아이콘 표시
+                img.parentElement.innerHTML = '<div class="no-image">📷</div>';
+            }
+        }
+
+        // 옵션 모달 표시
+        async function showOptions(productCode, productName) {
+            document.getElementById('modalTitle').textContent = productName;
+            document.getElementById('optionList').innerHTML = '<li class="option-item"><span class="option-text">로딩 중...</span></li>';
+
+            // 이미지 설정
+            const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
+            document.getElementById('modalProductImage').src = imageUrl;
+            document.getElementById('modalProductImage').onerror = function() {
+                this.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+                this.onerror = function() {
+                    this.style.display = 'none';
+                };
+            };
+            document.getElementById('modalProductImage').style.display = 'block';
+
+            document.getElementById('optionModal').classList.add('active');
+
+            try {
+                const response = await fetch('/api/product-options/' + encodeURIComponent(productCode));
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    // 통계 계산
+                    let totalStockCount = 0;
+                    let outOfStockCount = 0;
+                    result.data.forEach(opt => {
+                        const stock = opt.normal_stock || 0;
+                        totalStockCount += stock;
+                        if (stock === 0) outOfStockCount++;
+                    });
+
+                    document.getElementById('totalOptions').textContent = result.data.length;
+                    document.getElementById('totalStock').textContent = totalStockCount.toLocaleString();
+                    document.getElementById('outOfStock').textContent = outOfStockCount;
+
+                    document.getElementById('optionList').innerHTML = result.data.map((opt, idx) => {
+                        const stock = opt.normal_stock !== null ? opt.normal_stock : 0;
+                        const stockClass = stock > 10 ? 'color:#27ae60' : (stock > 0 ? 'color:#e67e22' : 'color:#e74c3c');
+                        const stockText = stock > 0 ? stock.toLocaleString() : '품절';
+                        return '<li class="option-item">' +
+                            '<span class="option-num">' + (idx + 1) + '</span>' +
+                            '<span class="option-text">' + (opt.supplier_option || '-') + '</span>' +
+                            '<span style="font-weight:bold; ' + stockClass + '">' + stockText + '</span>' +
+                        '</li>';
+                    }).join('');
+                } else {
+                    document.getElementById('totalOptions').textContent = '0';
+                    document.getElementById('totalStock').textContent = '0';
+                    document.getElementById('outOfStock').textContent = '0';
+                    document.getElementById('optionList').innerHTML = '<li class="option-item"><span class="option-text">옵션 정보가 없습니다.</span></li>';
+                }
+            } catch (error) {
+                document.getElementById('optionList').innerHTML = '<li class="option-item"><span class="option-text">오류: ' + error.message + '</span></li>';
+            }
+        }
+
+        // 모달 닫기
+        function closeModal(event) {
+            if (!event || event.target === document.getElementById('optionModal')) {
+                document.getElementById('optionModal').classList.remove('active');
+            }
+        }
+
+        // ESC 키로 모달 닫기
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        // 페이지 로드 시 전체 상품 로드
+        loadAllProducts();
+    </script>
+</body>
+</html>

@@ -334,6 +334,25 @@
             margin-left: 10px;
         }
 
+        .product-thumb {
+            width: 45px;
+            height: 45px;
+            object-fit: contain;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+        .product-thumb-placeholder {
+            width: 45px;
+            height: 45px;
+            background: #f0f0f0;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #bbb;
+            font-size: 18px;
+        }
+
         /* 모바일 최적화 */
         @media (max-width: 992px) {
             .grid-2 { grid-template-columns: 1fr; }
@@ -397,6 +416,8 @@
             <span>👤 {{ session.username }} 님</span>
             <a href="{{ url_for('upload_page') }}" class="btn btn-info">📤 데이터 업로드</a>
             <a href="{{ url_for('custom_view_page') }}" class="btn" style="background:#9b59b6; color:white;">📊 커스텀 뷰어</a>
+            <a href="{{ url_for('product_images_page') }}" class="btn" style="background:#e67e22; color:white;">📷 상품이미지</a>
+            <a href="{{ url_for('inventory_page') }}" class="btn" style="background:#27ae60; color:white;">📦 재고관리</a>
             <button class="btn btn-primary" onclick="saveReport()">📁 리포트 저장</button>
             <a href="{{ url_for('settings_page') }}" class="btn btn-secondary">⚙️ 설정</a>
             <a href="{{ url_for('logout') }}" class="btn btn-danger">로그아웃</a>
@@ -561,6 +582,7 @@
                         <thead>
                             <tr>
                                 <th>순위</th>
+                                <th>이미지</th>
                                 <th>상품코드</th>
                                 <th>상품명</th>
                                 <th>업체명</th>
@@ -1155,24 +1177,35 @@
 
                 if (data.length === 0) {
                     document.querySelector('#products-table tbody').innerHTML =
-                        '<tr><td colspan="7" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
+                        '<tr><td colspan="8" style="text-align:center; color:#888; padding:30px;">데이터가 없습니다.</td></tr>';
                     return;
                 }
 
                 const tbody = document.querySelector('#products-table tbody');
-                tbody.innerHTML = data.map((item, idx) => `
-                    <tr>
-                        <td>${idx + 1}</td>
-                        <td>${item.상품코드}</td>
-                        <td>${item.상품명}</td>
-                        <td class="supplier">${item.업체명 || '-'}</td>
-                        <td class="category">${item.카테고리 || '-'}</td>
-                        <td class="money">${formatMoney(item.실판매금액)}</td>
-                        <td class="qty">${formatNumber(item.판매량)}개</td>
-                    </tr>
-                `).join('');
+                tbody.innerHTML = data.map((item, idx) => {
+                    const productCode = item.상품코드 || '';
+                    const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
+                    return '<tr>' +
+                        '<td>' + (idx + 1) + '</td>' +
+                        '<td><img src="' + imageUrl + '" class="product-thumb" onerror="tryProductImage(this, \'' + productCode + '\')" alt=""></td>' +
+                        '<td>' + productCode + '</td>' +
+                        '<td>' + (item.상품명 || '-') + '</td>' +
+                        '<td class="supplier">' + (item.업체명 || '-') + '</td>' +
+                        '<td class="category">' + (item.카테고리 || '-') + '</td>' +
+                        '<td class="money">' + formatMoney(item.실판매금액) + '</td>' +
+                        '<td class="qty">' + formatNumber(item.판매량) + '개</td>' +
+                    '</tr>';
+                }).join('');
             } catch (e) {
                 console.error('Products data error:', e);
+            }
+        }
+
+        function tryProductImage(img, productCode) {
+            if (img.src.endsWith('.png')) {
+                img.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+            } else {
+                img.outerHTML = '<div class="product-thumb-placeholder">📷</div>';
             }
         }
 

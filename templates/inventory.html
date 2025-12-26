@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>재고 관리 - DRCAMP</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+
+        .navbar {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .navbar h1 { font-size: 1.5rem; }
+        .navbar a { color: white; text-decoration: none; margin-left: 20px; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 5px; }
+        .navbar a:hover { background: rgba(255,255,255,0.3); }
+
+        .container { max-width: 1400px; margin: 20px auto; padding: 0 20px; }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .summary-card .number { font-size: 1.8rem; font-weight: bold; }
+        .summary-card .label { color: #7f8c8d; font-size: 0.85rem; margin-top: 5px; }
+        .summary-card.green .number { color: #27ae60; }
+        .summary-card.red .number { color: #e74c3c; }
+        .summary-card.blue .number { color: #3498db; }
+        .summary-card.orange .number { color: #e67e22; }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .controls input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .controls input:focus { outline: none; border-color: #27ae60; }
+        .controls button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        .btn-primary { background: #27ae60; color: white; }
+        .btn-primary:hover { background: #219a52; }
+        .btn-secondary { background: #3498db; color: white; }
+        .btn-secondary:hover { background: #2980b9; }
+        .btn-warning { background: #e67e22; color: white; }
+        .btn-warning:hover { background: #d35400; }
+
+        .inventory-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .inventory-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .inventory-table th, .inventory-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .inventory-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+        .inventory-table tr:hover { background: #f8f9fa; }
+
+        .stock-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .stock-badge.in-stock { background: #d4edda; color: #155724; }
+        .stock-badge.low-stock { background: #fff3cd; color: #856404; }
+        .stock-badge.out-of-stock { background: #f8d7da; color: #721c24; }
+
+        .product-image {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+
+        .loading { text-align: center; padding: 50px; color: #7f8c8d; }
+        .empty-state { text-align: center; padding: 100px 20px; color: #7f8c8d; }
+        .empty-state .icon { font-size: 4rem; margin-bottom: 20px; }
+
+        .table-wrapper {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+        .pagination button {
+            padding: 8px 16px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .pagination button:hover { background: #e0e0e0; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .navbar { flex-direction: column; gap: 10px; padding: 10px 15px; }
+            .navbar h1 { font-size: 1.2rem; }
+            .navbar div { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+            .navbar a { margin-left: 0; padding: 6px 10px; font-size: 0.85rem; }
+
+            .container { padding: 0 10px; margin: 10px auto; }
+
+            .summary-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .summary-card { padding: 15px; }
+            .summary-card .number { font-size: 1.4rem; }
+            .summary-card .label { font-size: 0.75rem; }
+
+            .controls { flex-direction: column; padding: 15px; gap: 10px; }
+            .controls input { min-width: 100%; }
+            .controls button { width: 100%; }
+
+            .table-wrapper { max-height: 400px; overflow-x: auto; }
+            .inventory-table table { min-width: 800px; }
+            .inventory-table th, .inventory-table td { padding: 8px 10px; font-size: 0.85rem; }
+
+            .product-image { width: 40px; height: 40px; }
+
+            .pagination { gap: 5px; padding: 15px; }
+            .pagination button { padding: 8px 12px; font-size: 0.85rem; }
+        }
+
+        @media (max-width: 480px) {
+            .summary-cards { grid-template-columns: repeat(2, 1fr); }
+            .summary-card .number { font-size: 1.2rem; }
+            .navbar h1 { font-size: 1rem; }
+            .navbar a { padding: 5px 8px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>📦 재고 관리</h1>
+        <div>
+            <a href="{{ url_for('dashboard') }}">📊 대시보드</a>
+            <a href="{{ url_for('product_images_page') }}">📷 상품이미지</a>
+            <a href="{{ url_for('logout') }}">로그아웃</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="summary-cards">
+            <div class="summary-card blue">
+                <div class="number" id="totalProducts">{{ summary.total_products | default(0) | int }}</div>
+                <div class="label">전체 상품</div>
+            </div>
+            <div class="summary-card green">
+                <div class="number" id="inStock">{{ summary.in_stock | default(0) | int }}</div>
+                <div class="label">재고 있음</div>
+            </div>
+            <div class="summary-card red">
+                <div class="number" id="outOfStock">{{ summary.out_of_stock | default(0) | int }}</div>
+                <div class="label">품절</div>
+            </div>
+            <div class="summary-card orange">
+                <div class="number" id="totalStock">{{ "{:,}".format(summary.total_normal_stock | default(0) | int) }}</div>
+                <div class="label">총 재고수량</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="상품명으로 검색..." onkeypress="if(event.key==='Enter') searchInventory()">
+            <button class="btn-primary" onclick="searchInventory()">검색</button>
+            <button class="btn-secondary" onclick="loadAllInventory()">전체보기</button>
+            <button class="btn-warning" onclick="loadLowStock()">재고부족</button>
+        </div>
+
+        <div class="inventory-table">
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>이미지</th>
+                            <th>상품코드</th>
+                            <th>상품명</th>
+                            <th>옵션</th>
+                            <th>공급처</th>
+                            <th>정상재고</th>
+                            <th>가용재고</th>
+                            <th>상태</th>
+                            <th>판매가</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryBody">
+                        <tr><td colspan="9" class="loading">로딩 중...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination" style="display: none;">
+                <button onclick="prevPage()" id="prevBtn">← 이전</button>
+                <span id="pageInfo">1 / 1</span>
+                <button onclick="nextPage()" id="nextBtn">다음 →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allInventory = [];
+        let currentPage = 1;
+        const itemsPerPage = 50;
+
+        async function loadAllInventory() {
+            document.getElementById('inventoryBody').innerHTML = '<tr><td colspan="9" class="loading">로딩 중...</td></tr>';
+            document.getElementById('searchInput').value = '';
+
+            try {
+                // 기본 1000개만 로드 (성능 최적화)
+                const response = await fetch('/api/inventory?limit=1000');
+                console.log('API 응답:', response.status);
+                const result = await response.json();
+                console.log('데이터:', result);
+
+                if (result.success) {
+                    allInventory = result.data;
+                    currentPage = 1;
+                    renderInventory();
+                } else {
+                    showEmpty('데이터를 불러올 수 없습니다: ' + (result.error || ''));
+                }
+            } catch (error) {
+                console.error('API 에러:', error);
+                showEmpty('오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        async function searchInventory() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (!keyword) {
+                loadAllInventory();
+                return;
+            }
+
+            document.getElementById('inventoryBody').innerHTML = '<tr><td colspan="9" class="loading">검색 중...</td></tr>';
+
+            try {
+                const response = await fetch('/api/inventory?search=' + encodeURIComponent(keyword));
+                const result = await response.json();
+
+                if (result.success) {
+                    allInventory = result.data;
+                    currentPage = 1;
+                    renderInventory();
+                }
+            } catch (error) {
+                showEmpty('오류가 발생했습니다.');
+            }
+        }
+
+        async function loadLowStock() {
+            document.getElementById('inventoryBody').innerHTML = '<tr><td colspan="9" class="loading">로딩 중...</td></tr>';
+
+            try {
+                const response = await fetch('/api/inventory?low_stock=true');
+                const result = await response.json();
+
+                if (result.success) {
+                    allInventory = result.data;
+                    currentPage = 1;
+                    renderInventory();
+                }
+            } catch (error) {
+                showEmpty('오류가 발생했습니다.');
+            }
+        }
+
+        function renderInventory() {
+            const tbody = document.getElementById('inventoryBody');
+
+            if (allInventory.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="icon">📦</div><p>데이터가 없습니다.</p></td></tr>';
+                document.getElementById('pagination').style.display = 'none';
+                return;
+            }
+
+            const totalPages = Math.ceil(allInventory.length / itemsPerPage);
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageItems = allInventory.slice(start, end);
+
+            tbody.innerHTML = pageItems.map(item => {
+                const stock = item.normal_stock || 0;
+                let statusClass = 'out-of-stock';
+                let statusText = '품절';
+
+                if (stock > 10) {
+                    statusClass = 'in-stock';
+                    statusText = '정상';
+                } else if (stock > 0) {
+                    statusClass = 'low-stock';
+                    statusText = '부족';
+                }
+
+                // 이미지 URL 생성 (상품코드 기반)
+                const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + item.product_code + '_500.png';
+
+                return '<tr>' +
+                        '<td><img src="' + imageUrl + '" class="product-image" onerror="tryAltImage(this, \'' + item.product_code + '\')" alt=""></td>' +
+                        '<td>' + (item.product_code || '-') + '</td>' +
+                        '<td>' + (item.product_name || '-') + '</td>' +
+                        '<td>' + (item.option_name || '-') + '</td>' +
+                        '<td>' + (item.supplier || '-') + '</td>' +
+                        '<td><strong>' + (item.normal_stock || 0).toLocaleString() + '</strong></td>' +
+                        '<td>' + (item.available_stock || 0).toLocaleString() + '</td>' +
+                        '<td><span class="stock-badge ' + statusClass + '">' + statusText + '</span></td>' +
+                        '<td>' + (item.sale_price ? item.sale_price.toLocaleString() + '원' : '-') + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            // 페이지네이션
+            const pagination = document.getElementById('pagination');
+            if (totalPages > 1) {
+                pagination.style.display = 'flex';
+                document.getElementById('pageInfo').textContent = currentPage + ' / ' + totalPages;
+                document.getElementById('prevBtn').disabled = currentPage === 1;
+                document.getElementById('nextBtn').disabled = currentPage === totalPages;
+            } else {
+                pagination.style.display = 'none';
+            }
+        }
+
+        function tryAltImage(img, productCode) {
+            if (img.src.endsWith('.png')) {
+                img.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+            } else {
+                img.style.display = 'none';
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderInventory();
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(allInventory.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderInventory();
+            }
+        }
+
+        function showEmpty(message) {
+            document.getElementById('inventoryBody').innerHTML =
+                '<tr><td colspan="9" class="empty-state">' +
+                    '<div class="icon">📦</div>' +
+                    '<p>' + message + '</p>' +
+                '</td></tr>';
+        }
+
+        loadAllInventory();
+    </script>
+</body>
+</html>

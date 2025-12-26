@@ -244,13 +244,47 @@ def init_database():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )''',
 
+            # 상품 이미지 매핑 테이블 (이지어드민 연동)
+            '''CREATE TABLE IF NOT EXISTS product_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_option TEXT,
+                product_code TEXT,
+                product_name TEXT,
+                barcode TEXT,
+                image_url TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )''',
+
+            # 재고 테이블 (이지어드민 연동)
+            '''CREATE TABLE IF NOT EXISTS inventory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_code TEXT,
+                supplier TEXT,
+                product_name TEXT,
+                option_name TEXT,
+                supply_price REAL,
+                sale_price REAL,
+                supplier_option TEXT,
+                barcode TEXT,
+                normal_stock INTEGER DEFAULT 0,
+                available_stock INTEGER DEFAULT 0,
+                is_soldout INTEGER DEFAULT 0,
+                product_tag TEXT,
+                location TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )''',
+
             # 인덱스 생성
             'CREATE INDEX IF NOT EXISTS idx_sales_업체명 ON sales_data(업체명)',
             'CREATE INDEX IF NOT EXISTS idx_sales_카테고리 ON sales_data(카테고리)',
             'CREATE INDEX IF NOT EXISTS idx_sales_상품코드 ON sales_data(상품코드)',
             'CREATE INDEX IF NOT EXISTS idx_monthly_판매일자 ON monthly_sales(판매일자)',
             'CREATE INDEX IF NOT EXISTS idx_monthly_매장명 ON monthly_sales(매장명)',
-            'CREATE INDEX IF NOT EXISTS idx_monthly_업체명 ON monthly_sales(업체명)'
+            'CREATE INDEX IF NOT EXISTS idx_monthly_업체명 ON monthly_sales(업체명)',
+            'CREATE INDEX IF NOT EXISTS idx_product_images_supplier_option ON product_images(supplier_option)',
+            'CREATE INDEX IF NOT EXISTS idx_product_images_product_code ON product_images(product_code)',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_supplier_option ON inventory(supplier_option)',
+            'CREATE INDEX IF NOT EXISTS idx_inventory_product_code ON inventory(product_code)'
         ]
 
         conn = sqlite3.connect(DB_PATH)
@@ -1698,6 +1732,360 @@ def get_data_counts():
         except Exception as e:
             print(f"Count error: {e}")
             return {'sales_data': 0, 'monthly_sales': 0, 'upload_files': 0}
+
+# ============ 상품 이미지 함수들 (이지어드민 연동) ============
+
+def save_product_images(mappings):
+    """상품 이미지 매핑 데이터 저장 (기존 데이터 삭제 후 저장)
+
+    Args:
+        mappings: list of dict with keys: supplier_option, product_code, product_name, barcode, image_url
+
+    Returns:
+        int: 저장된 건수
+    """
+    if IS_LOCAL:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # 기존 데이터 삭제
+        cursor.execute('DELETE FROM product_images')
+
+        # 새 데이터 삽입
+        for m in mappings:
+            cursor.execute('''
+                INSERT INTO product_images (supplier_option, product_code, product_name, barcode, image_url)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (m.get('supplier_option'), m.get('product_code'), m.get('product_name'),
+                  m.get('barcode'), m.get('image_url')))
+
+        conn.commit()
+        conn.close()
+        return len(mappings)
+    else:
+        # Supabase - 기존 데이터 삭제 후 배치 삽입
+        try:
+            supabase_delete('product_images', 'id=gt.0')
+        except:
+            pass
+
+        if mappings:
+            supabase_insert('product_images', mappings)
+        return len(mappings)
+
+def get_product_image(supplier_option):
+    """공급처 옵션 코드로 상품 이미지 URL 조회
+
+    Args:
+        supplier_option: 공급처 옵션 코드 (예: WU5XNSOT101 XX 00F)
+
+    Returns:
+        dict or None: 상품 정보 (product_code, product_name, image_url)
+    """
+    if not supplier_option:
+        return None
+
+    if IS_LOCAL:
+        result = execute_query(
+            'SELECT * FROM product_images WHERE supplier_option = ?',
+            (supplier_option,)
+        )
+        return result[0] if result else None
+    else:
+        result = supabase_select('product_images', '*', f'supplier_option=eq.{supplier_option}')
+        return result[0] if result else None
+
+def get_product_image_by_code(product_code):
+    """상품코드로 이미지 URL 조회
+
+    Args:
+        product_code: 상품코드 (예: 12881)
+
+    Returns:
+        dict or None: 상품 정보
+    """
+    if not product_code:
+        return None
+
+    if IS_LOCAL:
+        result = execute_query(
+            'SELECT * FROM product_images WHERE product_code = ? LIMIT 1',
+            (str(product_code),)
+        )
+        return result[0] if result else None
+    else:
+        result = supabase_select('product_images', '*', f'product_code=eq.{product_code}', limit=1)
+        return result[0] if result else None
+
+def get_all_product_images():
+    """모든 상품 이미지 매핑 조회 (상품코드 기준 그룹화)
+
+    Returns:
+        list: 상품코드별 그룹화된 이미지 매핑 목록
+    """
+    if IS_LOCAL:
+        # 상품코드별로 그룹화하여 첫번째 상품명과 옵션 개수 반환
+        return execute_query('''
+            SELECT
+                product_code,
+                MIN(product_name) as product_name,
+                GROUP_CONCAT(DISTINCT supplier_option) as supplier_option,
+                MIN(image_url) as image_url,
+                COUNT(*) as option_count
+            FROM product_images
+            GROUP BY product_code
+            ORDER BY MIN(product_name)
+        ''')
+    else:
+        # Supabase에서는 전체 조회 후 Python에서 그룹화
+        all_data = supabase_select('product_images', '*', order='product_name.asc')
+        grouped = {}
+        for item in all_data:
+            code = item.get('product_code')
+            if code not in grouped:
+                grouped[code] = {
+                    'product_code': code,
+                    'product_name': item.get('product_name'),
+                    'supplier_option': item.get('supplier_option'),
+                    'image_url': item.get('image_url'),
+                    'option_count': 1
+                }
+            else:
+                grouped[code]['option_count'] += 1
+                # 옵션 정보 추가
+                existing = grouped[code]['supplier_option']
+                new_option = item.get('supplier_option')
+                if new_option and new_option not in existing:
+                    grouped[code]['supplier_option'] = existing + ', ' + new_option
+        return list(grouped.values())
+
+def get_product_images_count():
+    """상품 이미지 매핑 건수 조회"""
+    if IS_LOCAL:
+        result = execute_query('SELECT COUNT(*) as cnt FROM product_images')
+        return result[0]['cnt'] if result else 0
+    else:
+        try:
+            result = supabase_select('product_images', 'id')
+            return len(result)
+        except:
+            return 0
+
+def get_product_options_with_stock(product_code):
+    """상품코드로 옵션 목록과 재고 조회
+
+    Args:
+        product_code: 상품코드
+
+    Returns:
+        list: 옵션별 재고 정보 목록
+    """
+    if not product_code:
+        return []
+
+    if IS_LOCAL:
+        return execute_query('''
+            SELECT
+                pi.supplier_option,
+                pi.product_name,
+                pi.barcode,
+                COALESCE(inv.normal_stock, 0) as normal_stock,
+                COALESCE(inv.available_stock, 0) as available_stock
+            FROM product_images pi
+            LEFT JOIN inventory inv ON pi.supplier_option = inv.supplier_option
+            WHERE pi.product_code = ?
+            ORDER BY pi.supplier_option
+        ''', (product_code,))
+    else:
+        # Supabase: 먼저 product_images에서 조회 후 inventory와 매칭
+        images = supabase_select('product_images', '*', f'product_code=eq.{product_code}')
+        if not images:
+            return []
+
+        result = []
+        for img in images:
+            supplier_option = img.get('supplier_option')
+            inv_data = supabase_select('inventory', 'normal_stock,available_stock',
+                                       f'supplier_option=eq.{supplier_option}', limit=1)
+            stock = inv_data[0] if inv_data else {'normal_stock': 0, 'available_stock': 0}
+            result.append({
+                'supplier_option': supplier_option,
+                'product_name': img.get('product_name'),
+                'barcode': img.get('barcode'),
+                'normal_stock': stock.get('normal_stock', 0),
+                'available_stock': stock.get('available_stock', 0)
+            })
+        return result
+
+
+def search_product_images(keyword):
+    """상품명으로 이미지 검색 (상품코드 기준 그룹화)
+
+    Args:
+        keyword: 검색할 상품명 키워드
+
+    Returns:
+        list: 상품코드별 그룹화된 검색 결과 목록
+    """
+    if not keyword:
+        return []
+
+    if IS_LOCAL:
+        return execute_query('''
+            SELECT
+                product_code,
+                MIN(product_name) as product_name,
+                GROUP_CONCAT(DISTINCT supplier_option) as supplier_option,
+                MIN(image_url) as image_url,
+                COUNT(*) as option_count
+            FROM product_images
+            WHERE product_name LIKE ?
+            GROUP BY product_code
+            ORDER BY MIN(product_name)
+            LIMIT 100
+        ''', (f'%{keyword}%',))
+    else:
+        # Supabase ilike 검색 후 Python에서 그룹화
+        all_data = supabase_select('product_images', '*', f'product_name=ilike.*{keyword}*', limit=500)
+        grouped = {}
+        for item in all_data:
+            code = item.get('product_code')
+            if code not in grouped:
+                grouped[code] = {
+                    'product_code': code,
+                    'product_name': item.get('product_name'),
+                    'supplier_option': item.get('supplier_option'),
+                    'image_url': item.get('image_url'),
+                    'option_count': 1
+                }
+            else:
+                grouped[code]['option_count'] += 1
+        result = list(grouped.values())
+        return result[:100]
+
+
+# ============ 재고 함수들 (이지어드민 연동) ============
+
+def save_inventory(data_list):
+    """재고 데이터 저장 (기존 데이터 삭제 후 저장)
+
+    Args:
+        data_list: list of dict with inventory data
+
+    Returns:
+        int: 저장된 건수
+    """
+    if IS_LOCAL:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # 기존 데이터 삭제
+        cursor.execute('DELETE FROM inventory')
+
+        # 새 데이터 삽입
+        for item in data_list:
+            cursor.execute('''
+                INSERT INTO inventory (product_code, supplier, product_name, option_name,
+                    supply_price, sale_price, supplier_option, barcode,
+                    normal_stock, available_stock, is_soldout, product_tag, location)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                item.get('product_code'), item.get('supplier'), item.get('product_name'),
+                item.get('option_name'), item.get('supply_price'), item.get('sale_price'),
+                item.get('supplier_option'), item.get('barcode'),
+                item.get('normal_stock', 0), item.get('available_stock', 0),
+                item.get('is_soldout', 0), item.get('product_tag'), item.get('location')
+            ))
+
+        conn.commit()
+        conn.close()
+        return len(data_list)
+    else:
+        # Supabase
+        try:
+            supabase_delete('inventory', 'id=gt.0')
+        except:
+            pass
+
+        if data_list:
+            supabase_insert('inventory', data_list)
+        return len(data_list)
+
+def get_inventory_by_supplier_option(supplier_option):
+    """공급처 옵션 코드로 재고 조회"""
+    if not supplier_option:
+        return None
+
+    if IS_LOCAL:
+        result = execute_query(
+            'SELECT * FROM inventory WHERE supplier_option = ?',
+            (supplier_option,)
+        )
+        return result[0] if result else None
+    else:
+        result = supabase_select('inventory', '*', f'supplier_option=eq.{supplier_option}')
+        return result[0] if result else None
+
+def get_inventory_summary():
+    """재고 요약 통계"""
+    if IS_LOCAL:
+        result = execute_query('''
+            SELECT
+                COUNT(*) as total_products,
+                SUM(CASE WHEN normal_stock > 0 THEN 1 ELSE 0 END) as in_stock,
+                SUM(CASE WHEN normal_stock = 0 THEN 1 ELSE 0 END) as out_of_stock,
+                SUM(normal_stock) as total_normal_stock,
+                SUM(available_stock) as total_available_stock
+            FROM inventory
+        ''')
+        return result[0] if result else {}
+    else:
+        try:
+            data = supabase_select('inventory', '*')
+            in_stock = sum(1 for d in data if (d.get('normal_stock') or 0) > 0)
+            return {
+                'total_products': len(data),
+                'in_stock': in_stock,
+                'out_of_stock': len(data) - in_stock,
+                'total_normal_stock': sum(d.get('normal_stock') or 0 for d in data),
+                'total_available_stock': sum(d.get('available_stock') or 0 for d in data)
+            }
+        except:
+            return {}
+
+def get_all_inventory(limit=None):
+    """전체 재고 조회"""
+    if IS_LOCAL:
+        query = 'SELECT * FROM inventory ORDER BY normal_stock DESC'
+        if limit:
+            query += f' LIMIT {limit}'
+        return execute_query(query)
+    else:
+        return supabase_select('inventory', '*', order='normal_stock.desc', limit=limit)
+
+def search_inventory(keyword):
+    """재고 검색"""
+    if not keyword:
+        return []
+
+    if IS_LOCAL:
+        return execute_query(
+            'SELECT * FROM inventory WHERE product_name LIKE ? ORDER BY normal_stock DESC LIMIT 100',
+            (f'%{keyword}%',)
+        )
+    else:
+        return supabase_select('inventory', '*', f'product_name=ilike.*{keyword}*', limit=100)
+
+def get_low_stock_items(threshold=10):
+    """재고 부족 상품 조회"""
+    if IS_LOCAL:
+        return execute_query(
+            'SELECT * FROM inventory WHERE normal_stock > 0 AND normal_stock <= ? ORDER BY normal_stock ASC',
+            (threshold,)
+        )
+    else:
+        return supabase_select('inventory', '*', f'normal_stock=gt.0&normal_stock=lte.{threshold}', order='normal_stock.asc')
+
 
 # 초기화 실행
 if __name__ == '__main__':

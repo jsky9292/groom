@@ -17,7 +17,11 @@ from database import (
     verify_admin, change_password, get_admin_info,
     reset_all_data, get_data_counts,
     create_backup, restore_backup, get_backup_list, save_backup_to_file, load_backup_from_file,
-    delete_data_by_year, get_available_years
+    delete_data_by_year, get_available_years,
+    get_product_image, get_product_image_by_code, get_all_product_images,
+    get_product_images_count, search_product_images, get_product_options_with_stock,
+    save_inventory, get_inventory_by_supplier_option, get_inventory_summary,
+    get_all_inventory, search_inventory, get_low_stock_items
 )
 
 app = Flask(__name__)
@@ -790,6 +794,160 @@ def save_report():
         download_name=filename,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
+
+# ============ 상품 이미지 API (이지어드민 연동) ============
+
+@app.route('/api/product-image')
+@login_required
+def api_product_image():
+    """공급처 옵션 코드로 상품 이미지 조회
+
+    Query params:
+        supplier_option: 공급처 옵션 코드 (예: WU5XNSOT101 XX 00F)
+        product_code: 상품코드 (예: 12881)
+    """
+    supplier_option = request.args.get('supplier_option')
+    product_code = request.args.get('product_code')
+
+    try:
+        result = None
+        if supplier_option:
+            result = get_product_image(supplier_option)
+        elif product_code:
+            result = get_product_image_by_code(product_code)
+
+        if result:
+            return jsonify({'success': True, 'data': result})
+        else:
+            return jsonify({'success': False, 'error': '이미지를 찾을 수 없습니다.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/product-images')
+@login_required
+def api_product_images():
+    """상품 이미지 목록 조회
+
+    Query params:
+        search: 검색 키워드 (상품명)
+        limit: 조회 개수 (기본 100)
+    """
+    search = request.args.get('search')
+
+    try:
+        if search:
+            data = search_product_images(search)
+        else:
+            data = get_all_product_images()
+
+        return jsonify({
+            'success': True,
+            'data': data,
+            'total': len(data)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/product-images/count')
+@login_required
+def api_product_images_count():
+    """상품 이미지 매핑 건수 조회"""
+    try:
+        count = get_product_images_count()
+        return jsonify({'success': True, 'count': count})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/product-images')
+@login_required
+def product_images_page():
+    """상품 이미지 관리 페이지"""
+    count = get_product_images_count()
+    return render_template('product_images.html', count=count)
+
+
+@app.route('/api/product-options/<product_code>')
+@login_required
+def api_product_options(product_code):
+    """상품코드로 옵션 목록과 재고 조회"""
+    try:
+        data = get_product_options_with_stock(product_code)
+        return jsonify({
+            'success': True,
+            'data': data,
+            'count': len(data)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# ============ 재고 API (이지어드민 연동) ============
+
+@app.route('/api/inventory/summary')
+@login_required
+def api_inventory_summary():
+    """재고 요약 통계"""
+    try:
+        summary = get_inventory_summary()
+        return jsonify({'success': True, 'data': summary})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/inventory')
+@login_required
+def api_inventory():
+    """재고 목록 조회
+
+    Query params:
+        search: 검색 키워드
+        low_stock: true면 재고 부족 상품만
+        limit: 조회 개수
+    """
+    search = request.args.get('search')
+    low_stock = request.args.get('low_stock')
+    limit = request.args.get('limit', type=int)
+
+    try:
+        if search:
+            data = search_inventory(search)
+        elif low_stock == 'true':
+            data = get_low_stock_items(threshold=10)
+        else:
+            data = get_all_inventory(limit=limit)
+
+        return jsonify({
+            'success': True,
+            'data': data,
+            'total': len(data)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/inventory/by-option')
+@login_required
+def api_inventory_by_option():
+    """공급처 옵션으로 재고 조회"""
+    supplier_option = request.args.get('supplier_option')
+
+    if not supplier_option:
+        return jsonify({'success': False, 'error': '공급처 옵션이 필요합니다.'})
+
+    try:
+        result = get_inventory_by_supplier_option(supplier_option)
+        if result:
+            return jsonify({'success': True, 'data': result})
+        else:
+            return jsonify({'success': False, 'error': '재고 정보를 찾을 수 없습니다.'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/inventory')
+@login_required
+def inventory_page():
+    """재고 관리 페이지"""
+    summary = get_inventory_summary()
+    return render_template('inventory.html', summary=summary)
+
 
 # Vercel 서버리스에서는 앱 로드 시 DB 초기화
 init_database()

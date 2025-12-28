@@ -427,7 +427,7 @@
             const pageProducts = filteredProducts.slice(start, end);
 
             grid.innerHTML = pageProducts.map(p => {
-                const imageUrl = p.image_url || ('https://ga29.ezadmin.co.kr/uploads/drcamp/' + p.product_code + '_500.png');
+                const imageUrl = p.image_url;
                 const safeName = (p.product_name || '-').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 return '<div class="product-card" onclick="showModal(\'' + p.product_code + '\', \'' + safeName + '\')">' +
                     '<div class="product-image">' +
@@ -457,8 +457,14 @@
         }
 
         function tryAltImage(img, productCode) {
-            if (img.src.endsWith('.png')) {
-                img.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+            const baseUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/';
+            const currentSrc = img.src;
+            const extensions = ['png', 'jpg', 'jpeg'];
+            let currentExt = currentSrc.split('.').pop();
+            let nextExtIndex = extensions.indexOf(currentExt) + 1;
+
+            if (nextExtIndex < extensions.length) {
+                img.src = baseUrl + productCode + '_500.' + extensions[nextExtIndex];
             } else {
                 img.parentElement.innerHTML = '<div class="no-image">📷</div>';
             }
@@ -493,11 +499,11 @@
 
         // 이미지 팝업 모달
         function showModal(productCode, productName) {
-            const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
+            const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
             const img = document.getElementById('modalImage');
             img.src = imageUrl;
             img.onerror = function() {
-                this.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+                this.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
                 this.onerror = function() {
                     this.src = '';
                     this.alt = '이미지 없음';

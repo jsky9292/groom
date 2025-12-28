@@ -1184,7 +1184,7 @@
                 const tbody = document.querySelector('#products-table tbody');
                 tbody.innerHTML = data.map((item, idx) => {
                     const productCode = item.상품코드 || '';
-                    const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
+                    const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
                     return '<tr>' +
                         '<td>' + (idx + 1) + '</td>' +
                         '<td><img src="' + imageUrl + '" class="product-thumb" onerror="tryProductImage(this, \'' + productCode + '\')" alt=""></td>' +

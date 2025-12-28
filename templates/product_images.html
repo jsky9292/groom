@@ -473,10 +473,10 @@
             document.getElementById('optionList').innerHTML = '<li class="option-item"><span class="option-text">로딩 중...</span></li>';
 
             // 이미지 설정
-            const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
+            const imageUrl = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
             document.getElementById('modalProductImage').src = imageUrl;
             document.getElementById('modalProductImage').onerror = function() {
-                this.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.jpg';
+                this.src = 'https://ga29.ezadmin.co.kr/uploads/drcamp/' + productCode + '_500.png';
                 this.onerror = function() {
                     this.style.display = 'none';
                 };

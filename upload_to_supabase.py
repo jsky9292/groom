@@ -92,7 +92,9 @@ def upload_product_images():
         # 데이터 준비
         records = []
         for _, row in df.iterrows():
-            product_code = str(row.get(col_map.get('product_code'), '')).strip()
+            raw_code = row.get(col_map.get('product_code'), '')
+            # 5자리로 앞에 0 채우기
+            product_code = str(int(float(str(raw_code)))).zfill(5) if str(raw_code).strip() and str(raw_code) != 'nan' else ''
             supplier_option = str(row.get(col_map.get('supplier_option'), '')).strip()
 
             if product_code and supplier_option and supplier_option != 'nan' and product_code != 'nan':

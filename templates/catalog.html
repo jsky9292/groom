@@ -14,7 +14,10 @@
             padding: 30px 20px;
             text-align: center;
         }
-        .header h1 { font-size: 2rem; margin-bottom: 10px; }
+        .header h1 { font-size: 1.8rem; margin-bottom: 10px; }
+        .brand-logo { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 15px; }
+        .cloud-icon { font-size: 2.5rem; }
+        .brand-text { font-size: 1.8rem; font-weight: 700; letter-spacing: 2px; }
         .header p { opacity: 0.9; }
 
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -273,7 +276,11 @@
 </head>
 <body>
     <header class="header">
-        <h1>DRCAMP 상품 카탈로그</h1>
+        <div class="brand-logo">
+            <span class="cloud-icon">☁️</span>
+            <span class="brand-text">구름과 환경</span>
+        </div>
+        <h1>상품 카탈로그</h1>
         <p>Product Catalog for Buyers</p>
     </header>
 

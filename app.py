@@ -76,7 +76,8 @@ def update_file_row_count(file_id, row_count, increment=False):
     else:
         if increment:
             current = supabase_select('upload_files', 'row_count', f'id=eq.{file_id}')
-            current_count = current[0]['row_count'] if current else 0
+            # None 체크 추가: row_count가 None이면 0으로 처리
+            current_count = (current[0]['row_count'] or 0) if current else 0
             supabase_update('upload_files', {'row_count': current_count + row_count}, f'id=eq.{file_id}')
         else:
             supabase_update('upload_files', {'row_count': row_count}, f'id=eq.{file_id}')

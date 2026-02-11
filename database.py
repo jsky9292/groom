@@ -1,8 +1,11 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import httpx
 import json
+
+# 한국 시간대 (UTC+9)
+KST = timezone(timedelta(hours=9))
 
 # Supabase 환경 변수 (strip으로 공백/줄바꿈 제거)
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://xhjiokshzesnrmzppkwd.supabase.co').strip()
@@ -469,11 +472,14 @@ def save_upload_file(filename, original_name, file_type, row_count):
                    VALUES (?, ?, ?, ?)'''
         return execute_write(query, (filename, original_name, file_type, row_count))
     else:
+        # 한국 시간으로 upload_date 설정
+        kst_now = datetime.now(KST).isoformat()
         result = supabase_insert('upload_files', {
             'filename': filename,
             'original_name': original_name,
             'file_type': file_type,
-            'row_count': row_count
+            'row_count': row_count,
+            'upload_date': kst_now
         })
         return result[0]['id'] if result else 0
 
@@ -486,10 +492,16 @@ def save_sales_data(df, file_id):
         cursor = conn.cursor()
 
         for _, row in df.iterrows():
-            상품코드 = row.get('상품코드')
+            상품코드 = row.get('상품코드', '')
             상품명 = str(row.get('상품명', ''))
-            if pd.isna(상품코드) or 상품코드 == '' or 'row(s)' in 상품명:
+
+            # 상품명이 없거나 합계 행이면 건너뛰기
+            if not 상품명 or 'row(s)' in 상품명 or 상품명 == 'nan':
                 continue
+
+            # 상품코드가 없으면 빈 문자열로 처리
+            if pd.isna(상품코드):
+                상품코드 = ''
 
             분류명 = row.get('분류명', '')
             카테고리, 업체명 = parse_classification(분류명)
@@ -524,10 +536,16 @@ def save_sales_data(df, file_id):
         batch_data = []
 
         for _, row in df.iterrows():
-            상품코드 = row.get('상품코드')
+            상품코드 = row.get('상품코드', '')
             상품명 = str(row.get('상품명', ''))
-            if pd.isna(상품코드) or 상품코드 == '' or 'row(s)' in 상품명:
+
+            # 상품명이 없거나 합계 행이면 건너뛰기
+            if not 상품명 or 'row(s)' in 상품명 or 상품명 == 'nan':
                 continue
+
+            # 상품코드가 없으면 빈 문자열로 처리
+            if pd.isna(상품코드):
+                상품코드 = ''
 
             분류명 = row.get('분류명', '')
             카테고리, 업체명 = parse_classification(분류명)
@@ -537,9 +555,9 @@ def save_sales_data(df, file_id):
                 '분류명': str(분류명) if 분류명 else None,
                 '카테고리': 카테고리,
                 '업체명': 업체명,
-                '상품코드': str(row.get('상품코드', '')) if pd.notna(row.get('상품코드')) else None,
+                '상품코드': str(상품코드) if 상품코드 else None,
                 '바코드': str(row.get('바코드', '')) if pd.notna(row.get('바코드')) else None,
-                '상품명': str(row.get('상품명', '')) if pd.notna(row.get('상품명')) else None,
+                '상품명': 상품명,
                 '판매일': clean_numeric(row.get('판매일')),
                 '주문수': clean_numeric(row.get('주문수')),
                 '주문건': clean_numeric(row.get('주문건')),

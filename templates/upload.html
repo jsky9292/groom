@@ -395,8 +395,8 @@
                                 {% if file.file_type == 'original' %}원본{% elif file.file_type == 'monthly' %}월별{% else %}커스텀{% endif %}
                             </span>
                         </td>
-                        <td class="row-count">{{ "{:,}".format(file.row_count|int) }}행</td>
-                        <td class="file-date">{{ file.upload_date }}</td>
+                        <td class="row-count">{{ "{:,}".format(file.row_count|default(0)|int) }}행</td>
+                        <td class="file-date" data-date="{{ file.upload_date }}">{{ file.upload_date }}</td>
                         <td>
                             <div class="action-btns">
                                 {% if is_admin %}
@@ -426,10 +426,35 @@
         let pendingData = null;  // 미리보기 후 저장 대기 중인 데이터
         let pendingFile = null;  // 미리보기 후 저장 대기 중인 파일
 
-        // 페이지 로드 시 데이터 카운트 조회
-        document.addEventListener('DOMContentLoaded', loadDataCounts);
+        // 날짜 형식화 함수
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return dateStr;
+                return date.toLocaleString('ko-KR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        }
+
+        // 페이지 로드 시 날짜 형식화 및 데이터 카운트 조회
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDataCounts();
+            // 날짜 셀 형식화
+            document.querySelectorAll('.file-date[data-date]').forEach(cell => {
+                cell.textContent = formatDate(cell.dataset.date);
+            });
+        });
 
         async function loadDataCounts() {
+            // 데이터 카운트 조회
             try {
                 const response = await fetch('/api/data-counts');
                 const data = await response.json();

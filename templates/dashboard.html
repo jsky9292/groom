@@ -838,8 +838,61 @@
 
     <div class="toast" id="toast"></div>
 
+    <!-- 로딩 오버레이 -->
+    <div id="loading-overlay" style="
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.95);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    ">
+        <div style="text-align: center;">
+            <div style="font-size: 60px; margin-bottom: 20px; animation: bounce 1s infinite;">
+                📊
+            </div>
+            <h2 style="color: #667eea; margin-bottom: 10px;">데이터 불러오는 중...</h2>
+            <p id="loading-status" style="color: #888; font-size: 14px;">잠시만 기다려주세요</p>
+            <div style="margin-top: 20px;">
+                <div style="width: 200px; height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">
+                    <div id="loading-progress" style="width: 0%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: width 0.3s;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+
     <script>
         let charts = {};
+
+        // 로딩 오버레이 제어 함수
+        function showLoading(message = '데이터 불러오는 중...') {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-status').textContent = message;
+            document.getElementById('loading-progress').style.width = '0%';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        function updateLoadingProgress(percent, status) {
+            document.getElementById('loading-progress').style.width = percent + '%';
+            if (status) {
+                document.getElementById('loading-status').textContent = status;
+            }
+        }
 
         // 메인 탭 전환 함수 (원본 데이터 / 월별 데이터)
         function switchMainTab(type) {
@@ -902,7 +955,7 @@
             return params.toString() ? '?' + params.toString() : '';
         }
 
-        function applyDateFilter() {
+        async function applyDateFilter() {
             const startDate = getStartDate();
             const endDate = getEndDate();
 
@@ -911,16 +964,15 @@
                 return;
             }
 
-            showToast('날짜 범위로 데이터 조회 중...', 'info');
-            loadAllData(true);  // 데이터 새로고침
+            await loadAllData(true);  // 데이터 새로고침
             showToast('날짜 범위 필터 적용 완료!');
         }
 
-        function clearDateFilter() {
+        async function clearDateFilter() {
             document.getElementById('start-date').value = '';
             document.getElementById('end-date').value = '';
+            await loadAllData(true);
             showToast('날짜 필터 초기화됨');
-            loadAllData(true);
         }
 
         let filesData = [];  // 파일 목록 저장
@@ -998,9 +1050,7 @@
         }
 
         async function onFileChange() {
-            const fileId = getSelectedFileId();
             const fileName = document.getElementById('file-selector').selectedOptions[0].text;
-            showToast(`${fileName} 분석 중...`, 'info');
             await loadAllData(true);  // 파일 목록 재로드 스킵 (선택 유지)
             showToast(`${fileName} 분석 완료!`);
         }
@@ -1696,19 +1746,54 @@
         }
 
         async function loadAllData(skipFileLoad = false) {
-            if (!skipFileLoad) {
-                await loadFiles();  // 파일 목록 먼저 로드
+            showLoading('데이터 불러오는 중...');
+
+            try {
+                if (!skipFileLoad) {
+                    updateLoadingProgress(5, '파일 목록 조회 중...');
+                    await loadFiles();
+                }
+
+                updateLoadingProgress(10, '요약 통계 조회 중...');
+                await loadSummary();
+
+                updateLoadingProgress(20, '업체별 데이터 조회 중...');
+                await loadSupplierData();
+
+                updateLoadingProgress(30, '카테고리별 데이터 조회 중...');
+                await loadCategoryData();
+
+                updateLoadingProgress(40, '베스트셀러 조회 중...');
+                await loadProductsData();
+
+                updateLoadingProgress(50, '일별 데이터 조회 중...');
+                await loadDailyData();
+
+                updateLoadingProgress(60, '주간별 데이터 조회 중...');
+                await loadWeeklyData();
+
+                updateLoadingProgress(70, '월별 데이터 조회 중...');
+                await loadMonthlyData();
+
+                updateLoadingProgress(80, '매장별 데이터 조회 중...');
+                await loadStoreData();
+
+                updateLoadingProgress(90, '업체-카테고리 매트릭스 조회 중...');
+                await loadMatrixData();
+
+                updateLoadingProgress(95, '매장 상세 데이터 조회 중...');
+                await loadStoreDetailData();
+
+                updateLoadingProgress(100, '완료!');
+
+                // 잠시 후 로딩 오버레이 숨기기
+                setTimeout(hideLoading, 300);
+
+            } catch (error) {
+                console.error('데이터 로드 오류:', error);
+                updateLoadingProgress(100, '오류 발생: ' + error.message);
+                setTimeout(hideLoading, 2000);
             }
-            await loadSummary();
-            await loadSupplierData();
-            await loadCategoryData();
-            await loadProductsData();
-            await loadDailyData();
-            await loadWeeklyData();
-            await loadMonthlyData();
-            await loadStoreData();
-            await loadMatrixData();
-            await loadStoreDetailData();
         }
 
         document.addEventListener('DOMContentLoaded', async function() {
